@@ -29,8 +29,8 @@ GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
 #define gst_droid_cam_src_debug_init(ignored_parameter)                                      \
   GST_DEBUG_CATEGORY_INIT (droidcam_debug, "droidcam", 0, "Android camera source"); \
 
-GST_BOILERPLATE_FULL (GstDroidCamSrc, gst_droid_cam_src, GstBin,
-    GST_TYPE_BIN, gst_droid_cam_src_debug_init);
+GST_BOILERPLATE_FULL (GstDroidCamSrc, gst_droid_cam_src, GstBaseCameraSrc,
+    GST_TYPE_BASE_CAMERA_SRC, gst_droid_cam_src_debug_init);
 
 static void gst_droid_cam_src_finalize (GObject * object);
 
