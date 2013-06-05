@@ -22,6 +22,9 @@
 
 #include <gst/gst.h>
 
+#include "android/camera.h"
+#include "gst/gstgralloc.h"
+
 G_BEGIN_DECLS
 
 #define GST_TYPE_DROID_CAM_SRC \
@@ -40,6 +43,15 @@ typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;
 
 struct _GstDroidCamSrc {
   GstBin parent;
+
+  GstGralloc *gralloc;
+  struct hw_module_t *hwmod;
+  camera_module_t *cam;
+
+  struct hw_device_t *cam_dev;
+  camera_device_t *dev;
+
+  int camera_device;
 };
 
 struct _GstDroidCamSrcClass {
