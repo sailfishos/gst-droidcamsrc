@@ -28,6 +28,7 @@
 #include <gst/basecamerabinsrc/gstbasecamerasrc.h>
 #undef GST_USE_UNSTABLE_API
 #endif /* GST_USE_UNSTABLE_API */
+#include <stdlib.h>
 
 GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
@@ -69,7 +70,7 @@ static void gst_droid_cam_src_destruct_pipeline (GstDroidCamSrc * src);
 
 static gboolean gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_setup_callbacks (GstDroidCamSrc * src);
-static gboolean gst_droid_cam_src_setup_params (GstDroidCamSrc * src);
+static gboolean gst_droid_cam_src_set_params (GstDroidCamSrc * src);
 static void gst_droid_cam_src_tear_down_pipeline (GstDroidCamSrc * src);
 
 static gboolean gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src);
@@ -197,7 +198,7 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
     goto cleanup;
   }
 
-  if (!gst_droid_cam_src_setup_params (src)) {
+  if (!gst_droid_cam_src_set_params (src)) {
     goto cleanup;
   }
 
@@ -239,13 +240,31 @@ gst_droid_cam_src_setup_callbacks (GstDroidCamSrc * src)
 }
 
 static gboolean
-gst_droid_cam_src_setup_params (GstDroidCamSrc * src)
+gst_droid_cam_src_set_params (GstDroidCamSrc * src)
 {
-  GST_DEBUG_OBJECT (src, "setup params");
+  int err;
+  gchar *params;
+  gboolean ret = TRUE;
 
-  // TODO:
+  GST_DEBUG_OBJECT (src, "set params");
 
-  return TRUE;
+  params = src->dev->ops->get_parameters (src->dev);
+
+  err = src->dev->ops->set_parameters (src->dev, params);
+
+  if (err != 0) {
+    GST_ELEMENT_ERROR (src, LIBRARY, INIT,
+        ("Could not set camera parameters: %d", err), (NULL));
+    ret = FALSE;
+  }
+
+  if (src->dev->ops->put_parameters) {
+    src->dev->ops->put_parameters (src->dev, params);
+  } else {
+    free (params);
+  }
+
+  return ret;
 }
 
 static GstStateChangeReturn
