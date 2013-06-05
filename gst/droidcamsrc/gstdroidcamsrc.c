@@ -22,6 +22,8 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "gstdroidcamsrc.h"
+#include "gstcameramemory.h"
+
 #include <hardware/hardware.h>
 #ifndef GST_USE_UNSTABLE_API
 #define GST_USE_UNSTABLE_API
@@ -69,7 +71,7 @@ static gboolean gst_droid_cam_src_construct_pipeline (GstDroidCamSrc * src);
 static void gst_droid_cam_src_destruct_pipeline (GstDroidCamSrc * src);
 
 static gboolean gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src);
-static gboolean gst_droid_cam_src_setup_callbacks (GstDroidCamSrc * src);
+static gboolean gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_set_params (GstDroidCamSrc * src);
 static void gst_droid_cam_src_tear_down_pipeline (GstDroidCamSrc * src);
 
@@ -194,7 +196,7 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
 
   src->dev = (camera_device_t *) src->cam_dev;
 
-  if (!gst_droid_cam_src_setup_callbacks (src)) {
+  if (!gst_droid_cam_src_set_callbacks (src)) {
     goto cleanup;
   }
 
@@ -230,11 +232,15 @@ gst_droid_cam_src_tear_down_pipeline (GstDroidCamSrc * src)
 }
 
 static gboolean
-gst_droid_cam_src_setup_callbacks (GstDroidCamSrc * src)
+gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src)
 {
-  GST_DEBUG_OBJECT (src, "setup callbacks");
+  GST_DEBUG_OBJECT (src, "set callbacks");
 
-  // TODO:
+  /* TODO: Complete this when we know what we need */
+  src->dev->ops->set_callbacks (src->dev, NULL, // notify_cb
+      NULL,                     // data_cb
+      NULL,                     // data_cb_timestamp
+      gst_camera_memory_get, src);
 
   return TRUE;
 }

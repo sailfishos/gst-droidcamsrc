@@ -17,8 +17,8 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_DROID_CAM_SRC__
-#define __GST_DROID_CAM_SRC__
+#ifndef __GST_DROID_CAM_SRC_H__
+#define __GST_DROID_CAM_SRC_H__
 
 #include <gst/gst.h>
 
@@ -62,4 +62,4 @@ GType gst_droid_cam_src_get_type (void);
 
 G_END_DECLS
 
-#endif /* __GST_DROID_CAM_SRC__ */
+#endif /* __GST_DROID_CAM_SRC_H__ */
