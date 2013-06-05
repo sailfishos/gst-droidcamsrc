@@ -7,4 +7,4 @@ libgstdroidcamsrc_la_LIBADD = $(GST_LIBS) -lhardware -lgstbasecamerabinsrc-0.10
 libgstdroidcamsrc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 libgstdroidcamsrc_la_LIBTOOLFLAGS = --tag=disable-static
 
-noinst_HEADERS = gstdroidcamsrc.h
+noinst_HEADERS = android/camera.h android/camera_common.h gstdroidcamsrc.h
