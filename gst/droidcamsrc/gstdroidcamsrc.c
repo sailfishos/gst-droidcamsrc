@@ -226,7 +226,7 @@ gst_droid_cam_src_tear_down_pipeline (GstDroidCamSrc * src)
 
   src->hwmod = NULL;
   src->cam = NULL;
-  src->cam_dev = NULL;
+  src->dev = NULL;
 }
 
 static gboolean
