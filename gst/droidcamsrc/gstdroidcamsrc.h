@@ -21,11 +21,6 @@
 #define __GST_DROID_CAM_SRC__
 
 #include <gst/gst.h>
-#ifndef GST_USE_UNSTABLE_API
-#define GST_USE_UNSTABLE_API
-#include <gst/basecamerabinsrc/gstbasecamerasrc.h>
-#undef GST_USE_UNSTABLE_API
-#endif /* GST_USE_UNSTABLE_API */
 
 G_BEGIN_DECLS
 
@@ -44,11 +39,11 @@ typedef struct _GstDroidCamSrc GstDroidCamSrc;
 typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;
 
 struct _GstDroidCamSrc {
-  GstBaseCameraSrc parent;
+  GstBin parent;
 };
 
 struct _GstDroidCamSrcClass {
-  GstBaseCameraSrcClass parent_class;
+  GstBinClass parent_class;
 };
 
 GType gst_droid_cam_src_get_type (void);
