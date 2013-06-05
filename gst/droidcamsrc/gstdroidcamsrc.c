@@ -43,7 +43,7 @@ gst_droid_cam_src_base_init (gpointer gclass)
       "Android camera source",
       "Source/Video/Device",
       "Android camera HAL source",
-      "Mohammed Hassan <mohammed.hassan@jolla.com>");
+      "Mohammed Hassan <mohammed.hassan@jollamobile.com>");
 }
 
 static void
