@@ -24,6 +24,7 @@
 
 #include "android/camera.h"
 #include "gst/gstgralloc.h"
+#include "gstcamerabufferpool.h"
 
 G_BEGIN_DECLS
 
@@ -51,7 +52,9 @@ struct _GstDroidCamSrc {
   struct hw_device_t *cam_dev;
   camera_device_t *dev;
 
-  int camera_device;
+  GstCameraBufferPool *pool;
+
+  gint camera_device;
 };
 
 struct _GstDroidCamSrcClass {

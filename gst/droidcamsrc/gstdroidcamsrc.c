@@ -32,7 +32,7 @@
 #endif /* GST_USE_UNSTABLE_API */
 #include <stdlib.h>
 
-GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
+GST_DEBUG_CATEGORY (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
 
 #define gst_droid_cam_src_debug_init(ignored_parameter)                                      \
@@ -121,6 +121,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->hwmod = NULL;
   src->cam_dev = NULL;
   src->camera_device = 0;
+  src->pool = NULL;
 }
 
 static void
@@ -157,6 +158,8 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
         (NULL));
     goto cleanup;
   }
+
+  src->pool = gst_camera_buffer_pool_new (src->gralloc);
 
   err =
       hw_get_module (CAMERA_HARDWARE_MODULE_ID,
@@ -221,6 +224,11 @@ gst_droid_cam_src_tear_down_pipeline (GstDroidCamSrc * src)
     src->cam_dev = NULL;
   }
 
+  if (src->pool) {
+    gst_camera_buffer_pool_unref (src->pool);
+    src->pool = NULL;
+  }
+
   if (src->gralloc) {
     gst_gralloc_unref (src->gralloc);
     src->gralloc = NULL;
@@ -234,6 +242,8 @@ gst_droid_cam_src_tear_down_pipeline (GstDroidCamSrc * src)
 static gboolean
 gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src)
 {
+  int err;
+
   GST_DEBUG_OBJECT (src, "set callbacks");
 
   /* TODO: Complete this when we know what we need */
@@ -241,6 +251,13 @@ gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src)
       NULL,                     // data_cb
       NULL,                     // data_cb_timestamp
       gst_camera_memory_get, src);
+
+  err = src->dev->ops->set_preview_window (src->dev, &src->pool->window);
+
+  if (err != 0) {
+    GST_ELEMENT_ERROR (src, LIBRARY, INIT,
+        ("Could not set camera preview window: %d", err), (NULL));
+  }
 
   return TRUE;
 }
@@ -373,4 +390,7 @@ gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src)
   GST_DEBUG_OBJECT (src, "stop pipeline");
 
   src->dev->ops->stop_preview (src->dev);
+
+  /* TODO: Not sure this is correct */
+  gst_camera_buffer_pool_unlock_hal_queue (src->pool);
 }
