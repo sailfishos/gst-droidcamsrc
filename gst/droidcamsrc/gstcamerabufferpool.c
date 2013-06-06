@@ -98,6 +98,8 @@ gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
 
   buffer = gst_native_buffer_new (handle, pool->gralloc, stride);
 
+  GST_DEBUG_OBJECT (pool, "Allocated buffer %p", buffer);
+
   g_ptr_array_add (pool->buffers, buffer);
 
   g_mutex_lock (&pool->hal_lock);
@@ -434,8 +436,12 @@ gst_camera_buffer_pool_init (GstCameraBufferPool * pool)
 static void
 gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
 {
+  GST_DEBUG_OBJECT (pool, "finalize");
+
   while (pool->buffers->len > 0) {
     GstNativeBuffer *buffer = g_ptr_array_index (pool->buffers, 0);
+    GST_DEBUG_OBJECT (pool, "free buffer %p", buffer);
+
     buffer->finalize_callback = NULL;
 
     gst_gralloc_free (pool->gralloc, buffer->handle);
