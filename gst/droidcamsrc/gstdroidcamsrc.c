@@ -32,6 +32,11 @@
 #endif /* GST_USE_UNSTABLE_API */
 #include <stdlib.h>
 #include <gst/gstnativebuffer.h>
+#include "cameraparams.h"
+
+#define DEFAULT_WIDTH         640
+#define DEFAULT_HEIGHT        480
+#define DEFAULT_FPS           30
 
 GST_DEBUG_CATEGORY (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
@@ -128,6 +133,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->cam_dev = NULL;
   src->camera_device = 0;
   src->pool = NULL;
+  src->camera_params = NULL;
 
   src->vfsrc =
       gst_pad_new_from_static_template (&vfsrc_template,
@@ -264,6 +270,11 @@ gst_droid_cam_src_tear_down_pipeline (GstDroidCamSrc * src)
     src->gralloc = NULL;
   }
 
+  if (src->camera_params) {
+    camera_params_free (src->camera_params);
+    src->camera_params = NULL;
+  }
+
   src->hwmod = NULL;
   src->cam = NULL;
   src->dev = NULL;
@@ -303,18 +314,22 @@ gst_droid_cam_src_set_params (GstDroidCamSrc * src)
 
   params = src->dev->ops->get_parameters (src->dev);
 
-  err = src->dev->ops->set_parameters (src->dev, params);
-
-  if (err != 0) {
-    GST_ELEMENT_ERROR (src, LIBRARY, INIT,
-        ("Could not set camera parameters: %d", err), (NULL));
-    ret = FALSE;
-  }
+  src->camera_params = camera_params_from_string (params);
 
   if (src->dev->ops->put_parameters) {
     src->dev->ops->put_parameters (src->dev, params);
   } else {
     free (params);
+  }
+
+  params = camera_params_to_string (src->camera_params);
+  err = src->dev->ops->set_parameters (src->dev, params);
+  free (params);
+
+  if (err != 0) {
+    GST_ELEMENT_ERROR (src, LIBRARY, INIT,
+        ("Could not set camera parameters: %d", err), (NULL));
+    ret = FALSE;
   }
 
   return ret;
