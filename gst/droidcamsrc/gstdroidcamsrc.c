@@ -74,6 +74,7 @@ static gboolean gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_set_params (GstDroidCamSrc * src);
 static void gst_droid_cam_src_tear_down_pipeline (GstDroidCamSrc * src);
+static gboolean gst_droid_cam_src_probe_camera (GstDroidCamSrc * src);
 
 static gboolean gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src);
 static void gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src);
@@ -152,6 +153,42 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
 
   GST_DEBUG_OBJECT (src, "setup pipeline");
 
+  GST_DEBUG_OBJECT (src, "Attempting to open camera %d", src->camera_device);
+
+  cam_id = g_strdup_printf ("%i", src->camera_device);
+  err = src->cam->common.methods->open (src->hwmod, cam_id, &src->cam_dev);
+  g_free (cam_id);
+
+  if (err != 0) {
+    GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("failed to open camera device: %d",
+            err), (NULL));
+    goto cleanup;
+  }
+
+  src->dev = (camera_device_t *) src->cam_dev;
+
+  if (!gst_droid_cam_src_set_callbacks (src)) {
+    goto cleanup;
+  }
+
+  if (!gst_droid_cam_src_set_params (src)) {
+    goto cleanup;
+  }
+
+  return TRUE;
+
+cleanup:
+  gst_droid_cam_src_tear_down_pipeline (src);
+  return FALSE;
+}
+
+static gboolean
+gst_droid_cam_src_probe_camera (GstDroidCamSrc * src)
+{
+  int err = 0;
+
+  GST_DEBUG_OBJECT (src, "probe camera");
+
   src->gralloc = gst_gralloc_new ();
   if (!src->gralloc) {
     GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("Could not initialize gralloc"),
@@ -182,28 +219,6 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   if (src->cam->get_number_of_cameras () != 2) {
     GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("number of cameras is not 2"),
         (NULL));
-    goto cleanup;
-  }
-
-  GST_DEBUG_OBJECT (src, "Attempting to open camera %d", src->camera_device);
-
-  cam_id = g_strdup_printf ("%i", src->camera_device);
-  err = src->cam->common.methods->open (src->hwmod, cam_id, &src->cam_dev);
-  g_free (cam_id);
-
-  if (err != 0) {
-    GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("failed to open camera device: %d",
-            err), (NULL));
-    goto cleanup;
-  }
-
-  src->dev = (camera_device_t *) src->cam_dev;
-
-  if (!gst_droid_cam_src_set_callbacks (src)) {
-    goto cleanup;
-  }
-
-  if (!gst_droid_cam_src_set_params (src)) {
     goto cleanup;
   }
 
@@ -304,14 +319,19 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
   switch (transition) {
     case GST_STATE_CHANGE_NULL_TO_READY:
       if (!gst_droid_cam_src_construct_pipeline (src)
-          || !gst_droid_cam_src_setup_pipeline (src)) {
+          || !gst_droid_cam_src_probe_camera (src)) {
         ret = GST_STATE_CHANGE_FAILURE;
       }
 
       break;
 
     case GST_STATE_CHANGE_READY_TO_PAUSED:
-      no_preroll = TRUE;
+      if (!gst_droid_cam_src_setup_pipeline (src)) {
+        ret = GST_STATE_CHANGE_FAILURE;
+      } else {
+        no_preroll = TRUE;
+      }
+
       break;
 
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
