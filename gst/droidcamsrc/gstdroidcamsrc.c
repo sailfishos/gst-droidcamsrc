@@ -31,6 +31,7 @@
 #undef GST_USE_UNSTABLE_API
 #endif /* GST_USE_UNSTABLE_API */
 #include <stdlib.h>
+#include <gst/gstnativebuffer.h>
 
 GST_DEBUG_CATEGORY (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
@@ -79,6 +80,10 @@ static gboolean gst_droid_cam_src_probe_camera (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src);
 static void gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src);
 
+static gboolean gst_droid_cam_src_vfsrc_activatepush (GstPad * pad,
+    gboolean active);
+static void gst_droid_cam_src_vfsrc_loop (gpointer data);
+
 static void
 gst_droid_cam_src_base_init (gpointer gclass)
 {
@@ -123,6 +128,15 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->cam_dev = NULL;
   src->camera_device = 0;
   src->pool = NULL;
+
+  src->vfsrc =
+      gst_pad_new_from_static_template (&vfsrc_template,
+      GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME);
+  gst_pad_use_fixed_caps (src->vfsrc);
+  gst_pad_set_activatepush_function (src->vfsrc,
+      gst_droid_cam_src_vfsrc_activatepush);
+
+  gst_element_add_pad (GST_ELEMENT (src), src->vfsrc);
 }
 
 static void
@@ -160,8 +174,9 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   g_free (cam_id);
 
   if (err != 0) {
-    GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("failed to open camera device: %d",
-            err), (NULL));
+    GST_ELEMENT_ERROR (src, LIBRARY, INIT,
+        ("failed to open camera device %d: %d", src->camera_device, err),
+        (NULL));
     goto cleanup;
   }
 
@@ -185,7 +200,7 @@ cleanup:
 static gboolean
 gst_droid_cam_src_probe_camera (GstDroidCamSrc * src)
 {
-  int err = 0;
+  int err;
 
   GST_DEBUG_OBJECT (src, "probe camera");
 
@@ -196,7 +211,7 @@ gst_droid_cam_src_probe_camera (GstDroidCamSrc * src)
     goto cleanup;
   }
 
-  src->pool = gst_camera_buffer_pool_new (src->gralloc);
+  src->pool = gst_camera_buffer_pool_new (GST_ELEMENT (src), src->gralloc);
 
   err =
       hw_get_module (CAMERA_HARDWARE_MODULE_ID,
@@ -413,4 +428,140 @@ gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src)
 
   /* TODO: Not sure this is correct */
   gst_camera_buffer_pool_unlock_hal_queue (src->pool);
+}
+
+static gboolean
+gst_droid_cam_src_vfsrc_activatepush (GstPad * pad, gboolean active)
+{
+  GstDroidCamSrc *src;
+
+  src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
+
+  GST_DEBUG_OBJECT (src, "vfsrc activatepush: %d", active);
+
+  if (active) {
+    gboolean started;
+    src->vfsrc_eos_sent = FALSE;
+    src->vfsrc_segment_opened = FALSE;
+
+    GST_PAD_STREAM_LOCK (pad);
+
+    started = gst_pad_start_task (pad, gst_droid_cam_src_vfsrc_loop, pad);
+    if (!started) {
+
+      GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+      src->pool->flushing = TRUE;
+      GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+      GST_PAD_STREAM_UNLOCK (pad);
+
+      GST_ERROR_OBJECT (src, "Failed to start task");
+      gst_pad_stop_task (pad);
+      return FALSE;
+    }
+
+    GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+    src->pool->flushing = FALSE;
+    GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+    GST_PAD_STREAM_UNLOCK (pad);
+  } else {
+    GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+    src->pool->flushing = TRUE;
+    GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+    GST_DEBUG_OBJECT (src, "stopping task");
+
+    gst_camera_buffer_pool_unlock_app_queue (src->pool);
+
+    gst_pad_stop_task (pad);
+
+    GST_DEBUG_OBJECT (src, "stopped task");
+  }
+
+  return TRUE;
+}
+
+static void
+gst_droid_cam_src_vfsrc_loop (gpointer data)
+{
+  GstPad *pad = (GstPad *) data;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
+  GstCameraBufferPool *pool = gst_camera_buffer_pool_ref (src->pool);
+  GstNativeBuffer *buff;
+  GstFlowReturn ret;
+
+  GST_DEBUG_OBJECT (src, "loop");
+
+  GST_CAMERA_BUFFER_POOL_LOCK (pool);
+
+  if (pool->flushing) {
+
+    GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+
+    goto pool_flushing;
+  }
+
+  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+
+  g_mutex_lock (&pool->app_lock);
+  if (pool->app_queue->length > 0) {
+    buff = g_queue_pop_head (pool->app_queue);
+
+    g_mutex_unlock (&pool->app_lock);
+
+    goto push_buffer;
+  }
+
+  GST_DEBUG_OBJECT (src, "empty app queue. waiting for buffer");
+  g_cond_wait (&pool->app_cond, &pool->app_lock);
+
+  if (pool->app_queue->length == 0) {
+    /* pool is flushing. */
+    g_mutex_unlock (&pool->app_lock);
+
+    goto pool_flushing;
+  }
+
+  buff = g_queue_pop_head (pool->app_queue);
+
+  g_mutex_unlock (&pool->app_lock);
+  goto push_buffer;
+
+pool_flushing:
+  /* pause task. */
+  gst_camera_buffer_pool_unref (src->pool);
+
+  GST_DEBUG_OBJECT (src, "pool is flushing. pausing task");
+  gst_pad_pause_task (pad);
+  return;
+
+push_buffer:
+  /* push buffer */
+  gst_camera_buffer_pool_unref (src->pool);
+
+  ret = gst_pad_push (pad, GST_BUFFER (buff));
+  if (ret != GST_FLOW_OK) {
+    goto pause;
+  }
+  return;
+
+pause:
+  GST_DEBUG_OBJECT (src, "pausing task. reason: %s", gst_flow_get_name (ret));
+  gst_pad_pause_task (pad);
+
+  if (ret == GST_FLOW_UNEXPECTED) {
+    /* perform EOS */
+    gst_pad_push_event (pad, gst_event_new_eos ());
+  } else if (ret == GST_FLOW_NOT_LINKED || ret <= GST_FLOW_UNEXPECTED) {
+    GST_ELEMENT_ERROR (src, STREAM, FAILED,
+        ("Internal data flow error."),
+        ("streaming task paused, reason %s (%d)", gst_flow_get_name (ret),
+            ret));
+
+    /* perform EOS */
+    gst_pad_push_event (pad, gst_event_new_eos ());
+  }
+
+  return;
 }

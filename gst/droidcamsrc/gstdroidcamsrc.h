@@ -55,6 +55,10 @@ struct _GstDroidCamSrc {
   GstCameraBufferPool *pool;
 
   gint camera_device;
+
+  GstPad *vfsrc;
+  gboolean vfsrc_eos_sent;
+  gboolean vfsrc_segment_opened;
 };
 
 struct _GstDroidCamSrcClass {

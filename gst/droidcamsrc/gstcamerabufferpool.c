@@ -52,12 +52,13 @@ gst_camera_buffer_pool_class_init (GstCameraBufferPoolClass * pool_class)
 }
 
 GstCameraBufferPool *
-gst_camera_buffer_pool_new (GstGralloc * gralloc)
+gst_camera_buffer_pool_new (GstElement * src, GstGralloc * gralloc)
 {
   GstCameraBufferPool *pool =
       (GstCameraBufferPool *) gst_mini_object_new (GST_TYPE_CAMERA_BUFFER_POOL);
 
   pool->gralloc = gst_gralloc_ref (gralloc);
+  pool->src = (GstElement *) gst_object_ref (src);
 
   return pool;
 }
@@ -72,12 +73,49 @@ gst_camera_buffer_pool_unlock_hal_queue (GstCameraBufferPool * pool)
   g_mutex_unlock (&pool->hal_lock);
 }
 
+void
+gst_camera_buffer_pool_unlock_app_queue (GstCameraBufferPool * pool)
+{
+  GST_LOG_OBJECT (pool, "unlock app queue");
+
+  g_mutex_lock (&pool->app_lock);
+  g_cond_signal (&pool->app_cond);
+  g_mutex_unlock (&pool->app_lock);
+}
+
+static gboolean
+gst_camera_buffer_pool_resurrect_buffer (void *data, GstNativeBuffer * buffer)
+{
+  GstCameraBufferPool *pool = (GstCameraBufferPool *) data;
+
+  GST_CAMERA_BUFFER_POOL_LOCK (pool);
+
+  gst_buffer_ref (GST_BUFFER (buffer));
+
+  GST_DEBUG_OBJECT (pool, "resurrect buffer");
+
+  g_mutex_lock (&pool->hal_lock);
+
+  g_queue_push_tail (pool->hal_queue, buffer);
+
+  g_cond_signal (&pool->hal_cond);
+
+  g_mutex_unlock (&pool->hal_lock);
+
+  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+
+  /* TODO: If we return FALSE then we need to unref the pool. */
+
+  return TRUE;
+}
+
 static gboolean
 gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
 {
   buffer_handle_t handle = NULL;
   int stride = 0;
   GstNativeBuffer *buffer = NULL;
+  GstCaps *caps;
 
   GST_DEBUG_OBJECT (pool, "allocate and add");
 
@@ -97,10 +135,21 @@ gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
   }
 
   buffer = gst_native_buffer_new (handle, pool->gralloc, stride);
-
   GST_DEBUG_OBJECT (pool, "Allocated buffer %p", buffer);
 
+  caps = gst_caps_new_simple ("video/x-android-buffer",
+      "width", G_TYPE_INT, pool->width,
+      "height", G_TYPE_INT, pool->height, NULL);
+  GST_DEBUG_OBJECT (pool, "setting buffer caps to %" GST_PTR_FORMAT, caps);
+  gst_buffer_set_caps (GST_BUFFER (buffer), caps);
+  gst_caps_unref (caps);
+
+  buffer->finalize_callback = gst_camera_buffer_pool_resurrect_buffer;
+  buffer->finalize_callback_data = pool;
+
   g_ptr_array_add (pool->buffers, buffer);
+
+  gst_camera_buffer_pool_ref (pool);
 
   g_mutex_lock (&pool->hal_lock);
 
@@ -324,7 +373,51 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
 
   GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 
+  GST_DEBUG_OBJECT (pool, "dequeueing buffer %p", buff);
+
   return 0;
+}
+
+static void
+gst_camera_buffer_pool_set_buffer_metadata_unlocked (GstCameraBufferPool * pool,
+    GstNativeBuffer * buffer)
+{
+  GstBuffer *buff = GST_BUFFER (buffer);
+
+  GST_DEBUG_OBJECT (pool, "set buffer metadata");
+
+  GST_BUFFER_OFFSET (buff) = pool->frames++;
+  GST_BUFFER_OFFSET_END (buff) = pool->frames;
+
+
+  /* TODO: We don't know how the timestamp format really is.
+     This assertion is there until we get Android HAL which sends timestamp
+     and we know what to do with it. */
+  g_return_if_fail (pool->last_timestamp == 0);
+
+  if (!pool->last_timestamp) {
+    GstClock *clock;
+    GstClockTime timestamp;
+
+    GST_OBJECT_LOCK (pool->src);
+    clock = GST_ELEMENT_CLOCK (pool->src);
+
+    if (clock) {
+      /* We have a clock, get base time and ref clock */
+      timestamp = gst_clock_get_time (clock) - pool->src->base_time;
+    } else {
+      timestamp = GST_CLOCK_TIME_NONE;
+    }
+
+    GST_OBJECT_UNLOCK (pool->src);
+
+    GST_BUFFER_TIMESTAMP (buff) = timestamp;
+
+    GST_LOG_OBJECT (pool, "buffer timestamp set to %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (timestamp));
+  }
+
+  /* TODO: duration (Which depends on the frame rate :/) */
 }
 
 static int
@@ -334,17 +427,34 @@ gst_camera_buffer_pool_enqueue_buffer (struct preview_stream_ops *w,
   GstCameraBufferPool *pool = gst_camera_buffer_pool_get (w);
   GstNativeBuffer *buff = gst_camera_buffer_pool_get_buffer (buffer);
 
-  GST_DEBUG_OBJECT (pool, "enqueue buffer");
+  GST_DEBUG_OBJECT (pool, "enqueue buffer %p", buff);
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
-  g_mutex_lock (&pool->hal_lock);
+  if (pool->flushing) {
+    GST_DEBUG_OBJECT (pool,
+        "pool is flushing. Pushing buffer %p back to camera HAL", buff);
 
-  g_queue_push_tail (pool->hal_queue, buff);
+    g_mutex_lock (&pool->hal_lock);
 
-  g_cond_signal (&pool->hal_cond);
+    g_queue_push_tail (pool->hal_queue, buff);
 
-  g_mutex_unlock (&pool->hal_lock);
+    g_cond_signal (&pool->hal_cond);
+
+    g_mutex_unlock (&pool->hal_lock);
+  } else {
+    gst_camera_buffer_pool_set_buffer_metadata_unlocked (pool, buff);
+
+    GST_DEBUG_OBJECT (pool, "Pushing buffer %p to application queue", buff);
+
+    g_mutex_lock (&pool->app_lock);
+
+    g_queue_push_tail (pool->app_queue, buff);
+
+    g_cond_signal (&pool->app_cond);
+
+    g_mutex_unlock (&pool->app_lock);
+  }
 
   GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 
@@ -406,6 +516,9 @@ gst_camera_buffer_pool_set_timestamp (struct preview_stream_ops *w,
 static void
 gst_camera_buffer_pool_init (GstCameraBufferPool * pool)
 {
+  pool->flushing = TRUE;
+  pool->frames = 0;
+
   g_mutex_init (&pool->lock);
 
   pool->buffers = g_ptr_array_new ();
@@ -449,6 +562,7 @@ gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
     g_ptr_array_remove (pool->buffers, buffer);
 
     gst_buffer_unref (GST_BUFFER (buffer));
+    gst_camera_buffer_pool_unref (pool);
   }
 
   g_ptr_array_free (pool->buffers, TRUE);
@@ -462,6 +576,7 @@ gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
   g_queue_free (pool->app_queue);
 
   gst_gralloc_unref (pool->gralloc);
+  gst_object_unref (pool->src);
 
   g_mutex_free (&pool->lock);
 

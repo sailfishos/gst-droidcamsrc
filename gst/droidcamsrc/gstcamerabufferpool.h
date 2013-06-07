@@ -20,9 +20,11 @@
 #ifndef __GST_CAMERA_BUFFER_POOL_H__
 #define __GST_CAMERA_BUFFER_POOL_H__
 
+#include <gst/gst.h>
 #include <gst/gstminiobject.h>
 #include "android/camera.h"
 #include <gst/gstgralloc.h>
+
 
 G_BEGIN_DECLS
 
@@ -43,6 +45,7 @@ struct _GstCameraBufferPool {
   GstMiniObject parent;
 
   GstGralloc *gralloc;
+  GstElement *src;
 
   GMutex lock;
 
@@ -75,6 +78,9 @@ struct _GstCameraBufferPool {
   int64_t last_timestamp;
 
   gint usage;
+
+  int frames;
+  gboolean flushing;
 };
 
 struct _GstCameraBufferPoolClass {
@@ -83,9 +89,10 @@ struct _GstCameraBufferPoolClass {
 
 GType           gst_camera_buffer_pool_get_type           (void);
 
-GstCameraBufferPool *gst_camera_buffer_pool_new (GstGralloc * gralloc);
+GstCameraBufferPool *gst_camera_buffer_pool_new (GstElement * src, GstGralloc * gralloc);
 
 void gst_camera_buffer_pool_unlock_hal_queue (GstCameraBufferPool * pool);
+void gst_camera_buffer_pool_unlock_app_queue (GstCameraBufferPool * pool);
 
 G_INLINE_FUNC GstCameraBufferPool *gst_camera_buffer_pool_ref (GstCameraBufferPool * pool);
 G_INLINE_FUNC void gst_camera_buffer_pool_unref (GstCameraBufferPool * pool);
