@@ -149,8 +149,6 @@ gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
 
   g_ptr_array_add (pool->buffers, buffer);
 
-  gst_camera_buffer_pool_ref (pool);
-
   g_mutex_lock (&pool->hal_lock);
 
   g_queue_push_tail (pool->hal_queue, buffer);
@@ -557,13 +555,12 @@ gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
     GST_DEBUG_OBJECT (pool, "free buffer %p", buffer);
 
     buffer->finalize_callback = NULL;
-
+    /* TODO: It might be that we are freeing a buffer being held by someone :| */
     gst_gralloc_free (pool->gralloc, buffer->handle);
 
     g_ptr_array_remove (pool->buffers, buffer);
 
     gst_buffer_unref (GST_BUFFER (buffer));
-    gst_camera_buffer_pool_unref (pool);
   }
 
   g_ptr_array_free (pool->buffers, TRUE);
