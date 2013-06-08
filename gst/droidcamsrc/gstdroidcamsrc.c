@@ -72,6 +72,8 @@ GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_VIDEO_PAD_NAME,
 static void gst_droid_cam_src_finalize (GObject * object);
 static GstStateChangeReturn gst_droid_cam_src_change_state (GstElement *
     element, GstStateChange transition);
+static gboolean gst_droid_cam_src_send_event (GstElement * element,
+    GstEvent * event);
 
 static gboolean gst_droid_cam_src_construct_pipeline (GstDroidCamSrc * src);
 static void gst_droid_cam_src_destruct_pipeline (GstDroidCamSrc * src);
@@ -119,6 +121,7 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
   gobject_class->finalize = gst_droid_cam_src_finalize;
   element_class->change_state =
       GST_DEBUG_FUNCPTR (gst_droid_cam_src_change_state);
+  element_class->send_event = GST_DEBUG_FUNCPTR (gst_droid_cam_src_send_event);
 }
 
 static void
@@ -416,6 +419,70 @@ out:
 }
 
 static gboolean
+gst_droid_cam_src_send_event (GstElement * element, GstEvent * event)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (element);
+  gboolean ret = FALSE;
+
+  GST_DEBUG_OBJECT (src, "send event (%p) %" GST_PTR_FORMAT, event, event);
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_FLUSH_START:
+    case GST_EVENT_FLUSH_STOP:
+    case GST_EVENT_NEWSEGMENT:
+    case GST_EVENT_QOS:
+    case GST_EVENT_NAVIGATION:
+    case GST_EVENT_LATENCY:
+    case GST_EVENT_SEEK:
+    case GST_EVENT_STEP:
+    case GST_EVENT_BUFFERSIZE:
+    case GST_EVENT_SINK_MESSAGE:
+      break;
+
+    case GST_EVENT_EOS:
+      gst_camera_buffer_pool_unlock_app_queue (src->pool);
+
+      GST_PAD_STREAM_LOCK (src->vfsrc);
+      gst_pad_pause_task (src->vfsrc);
+      GST_PAD_STREAM_UNLOCK (src->vfsrc);
+
+      ret = gst_pad_push_event (src->vfsrc, event);
+
+      GST_DEBUG_OBJECT (src, "pushing event %p", event);
+
+      event = NULL;
+
+      break;
+
+    case GST_EVENT_CUSTOM_DOWNSTREAM:
+    case GST_EVENT_CUSTOM_UPSTREAM:
+    case GST_EVENT_UNKNOWN:
+    case GST_EVENT_TAG:
+    case GST_EVENT_CUSTOM_DOWNSTREAM_OOB:
+    case GST_EVENT_CUSTOM_BOTH:
+    case GST_EVENT_CUSTOM_BOTH_OOB:
+      if (GST_EVENT_IS_SERIALIZED (event)) {
+        GST_DEBUG_OBJECT (src, "queueing event %p", event);
+        /* TODO: */
+      } else {
+        ret = gst_pad_push_event (src->vfsrc, event);
+        GST_DEBUG_OBJECT (src, "pushing event %p", event);
+        event = NULL;
+      }
+
+      break;
+  }
+
+  if (event) {
+    GST_DEBUG_OBJECT (src, "dropping event %p", event);
+
+    gst_event_unref (event);
+  }
+
+  return ret;
+}
+
+static gboolean
 gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
 {
   int err;
@@ -456,8 +523,8 @@ gst_droid_cam_src_vfsrc_activatepush (GstPad * pad, gboolean active)
 
   if (active) {
     gboolean started;
-    src->vfsrc_eos_sent = FALSE;
-    src->vfsrc_segment_opened = FALSE;
+    // TODO:
+    //    src->vfsrc_segment_opened = FALSE;
 
     GST_PAD_STREAM_LOCK (pad);
 
