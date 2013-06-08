@@ -32,8 +32,8 @@ static GstCameraBufferPoolClass *parent_class;
 G_DEFINE_TYPE (GstCameraBufferPool, gst_camera_buffer_pool,
     GST_TYPE_MINI_OBJECT);
 
-GST_DEBUG_CATEGORY_EXTERN (droidcam_debug);
-#define GST_CAT_DEFAULT droidcam_debug
+GST_DEBUG_CATEGORY_STATIC (droidcambufferpool_debug);
+#define GST_CAT_DEFAULT droidcambufferpool_debug
 
 #define MIN_UNDEQUEUED_BUFFER_COUNT 1
 
@@ -49,6 +49,9 @@ gst_camera_buffer_pool_class_init (GstCameraBufferPoolClass * pool_class)
 
   mo_class->finalize =
       (GstMiniObjectFinalizeFunction) gst_camera_buffer_pool_finalize;
+
+  GST_DEBUG_CATEGORY_INIT (droidcambufferpool_debug, "droidbufferpool", 0,
+      "Android camera buffer pool");
 }
 
 GstCameraBufferPool *

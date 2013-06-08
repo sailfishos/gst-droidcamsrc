@@ -38,7 +38,7 @@
 #define DEFAULT_HEIGHT        480
 #define DEFAULT_FPS           30
 
-GST_DEBUG_CATEGORY (droidcam_debug);
+GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
 
 #define gst_droid_cam_src_debug_init(ignored_parameter)                                      \
