@@ -31,7 +31,9 @@ typedef struct {
     std::map<std::string, std::vector<std::string> > items;
 } camera_params;
 
-void *camera_params_from_string(const char *str) {
+void *
+camera_params_from_string(const char *str)
+{
     std::string s(str);
 
     std::stringstream stream;
@@ -65,12 +67,16 @@ void *camera_params_from_string(const char *str) {
     return params;
 }
 
-void camera_params_free(void *params) {
+void
+camera_params_free(void *params)
+{
     camera_params *p = reinterpret_cast<camera_params *>(params);
     delete p;
 }
 
-void to_stream(void *p, std::stringstream& stream, char sep) {
+void
+to_stream(void *p, std::stringstream& stream, char sep)
+{
     camera_params *params = reinterpret_cast<camera_params *>(p);
 
     std::map<std::string, std::vector<std::string> >::iterator end = params->items.end();
@@ -95,7 +101,9 @@ void to_stream(void *p, std::stringstream& stream, char sep) {
     }
 }
 
-char *camera_params_to_string(void *params) {
+char *
+camera_params_to_string(void *params)
+{
     std::stringstream s;
 
     to_stream(params, s, ';');
@@ -103,7 +111,9 @@ char *camera_params_to_string(void *params) {
     return strdup(s.str().c_str());
 }
 
-void camera_params_dump(void *params) {
+void
+camera_params_dump(void *params)
+{
     std::stringstream s;
 
     to_stream(params, s, '\n');
@@ -111,7 +121,9 @@ void camera_params_dump(void *params) {
     std::cout << s.str() << std::endl;
 }
 
-void camera_params_set(void *p, const char *key, const char *val) {
+void
+camera_params_set(void *p, const char *key, const char *val)
+{
     camera_params *params = reinterpret_cast<camera_params *>(p);
 
     std::vector<std::string> values;
