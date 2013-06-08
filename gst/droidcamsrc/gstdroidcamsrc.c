@@ -523,8 +523,7 @@ gst_droid_cam_src_vfsrc_activatepush (GstPad * pad, gboolean active)
 
   if (active) {
     gboolean started;
-    // TODO:
-    //    src->vfsrc_segment_opened = FALSE;
+    src->send_new_segment = TRUE;
 
     GST_PAD_STREAM_LOCK (pad);
 
@@ -621,6 +620,13 @@ pool_flushing:
 push_buffer:
   /* push buffer */
   gst_camera_buffer_pool_unref (src->pool);
+  if (G_UNLIKELY (src->send_new_segment)) {
+    src->send_new_segment = FALSE;
+    if (!gst_pad_push_event (src->vfsrc, gst_event_new_new_segment (FALSE, 1.0,
+                GST_FORMAT_TIME, 0, -1, 0))) {
+      GST_WARNING_OBJECT (src, "failed to push new segment");
+    }
+  }
 
   ret = gst_pad_push (pad, GST_BUFFER (buff));
   if (ret != GST_FLOW_OK) {
