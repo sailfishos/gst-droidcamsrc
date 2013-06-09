@@ -704,9 +704,9 @@ gst_droid_cam_src_vfsrc_setcaps (GstPad * pad, GstCaps * caps)
     return FALSE;
   }
 
-  gst_util_fraction_to_double (fps_n, fps_d, &fps);
+  fps = fps_n / fps_d;
   camera_params_set_viewfinder_size (src->camera_params, width, height);
-  camera_params_set_viewfinder_fps (src->camera_params, fps);   /* TODO: properly convert to int */
+  camera_params_set_viewfinder_fps (src->camera_params, fps);
 
   if (gst_droid_cam_src_set_params (src)) {
     /* buffer pool needs to know about FPS */
