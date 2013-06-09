@@ -21,6 +21,7 @@
 #define __CAMERA_PARAMS_HH__
 
 #include <glib.h>
+#include <gst/gst.h>
 
 G_BEGIN_DECLS
 
@@ -29,6 +30,7 @@ void camera_params_free(void *params);
 char *camera_params_to_string(void *params);
 void camera_params_dump(void *params);
 void camera_params_set(void *p, const char *key, const char *val);
+GstCaps *camera_params_get_viewfinder_caps (void *p);
 
 G_END_DECLS
 

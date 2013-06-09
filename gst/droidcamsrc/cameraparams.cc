@@ -24,6 +24,7 @@
 #include <map>
 #include <vector>
 #include <cstring>
+#include <cstdlib>
 
 G_BEGIN_DECLS;
 
@@ -131,6 +132,69 @@ camera_params_set(void *p, const char *key, const char *val)
     values.push_back(val);
 
     params->items.insert(std::pair<std::string, std::vector<std::string> >(key, values));
+}
+
+GstCaps *
+camera_params_get_viewfinder_caps (void *p)
+{
+  camera_params *params = reinterpret_cast<camera_params *>(p);
+
+  std::map<std::string, std::vector<std::string> >::iterator sizes =
+    params->items.find("preview-size-values");
+
+  std::map<std::string, std::vector<std::string> >::iterator fpss =
+    params->items.find("preview-frame-rate-values");
+
+  if (sizes == params->items.end() || fpss == params->items.end()) {
+    return gst_caps_new_empty ();
+  }
+
+  GstCaps *caps = gst_caps_new_empty ();
+
+  for (std::vector<std::string>::iterator size = sizes->second.begin();
+       size != sizes->second.end(); size++) {
+    std::stringstream stream;
+    stream.str(*size);
+    std::vector<std::string> d;
+    std::string item;
+
+    while (getline(stream, item, 'x')) {
+      d.push_back(item);
+    }
+
+    if (d.size() != 2) {
+      continue;
+    }
+
+    int width = atoi(d[0].c_str());
+    int height = atoi(d[1].c_str());
+
+    if (!width || !height) {
+      continue;
+    }
+
+    for (std::vector<std::string>::iterator fps = fpss->second.begin();
+	 fps != fpss->second.end(); fps++) {
+
+      int f = atoi((*fps).c_str());
+
+      if (!f) {
+	continue;
+      }
+
+      GstStructure *s = gst_structure_new ("video/x-android-buffer", 
+					   "width", G_TYPE_INT, width,
+					   "height", G_TYPE_INT, height,
+					   "framerate", GST_TYPE_FRACTION, f, 1,
+					   NULL);
+
+      gst_caps_append_structure (caps, s);
+    }
+  }
+
+  gst_caps_do_simplify (caps);
+
+  return caps;
 }
 
 G_END_DECLS;
