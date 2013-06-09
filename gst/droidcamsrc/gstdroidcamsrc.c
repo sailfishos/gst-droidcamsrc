@@ -339,8 +339,6 @@ gst_droid_cam_src_set_params (GstDroidCamSrc * src)
   err = src->dev->ops->set_parameters (src->dev, params);
   free (params);
 
-  camera_params_dump (src->camera_params);
-
   if (err != 0) {
     GST_ELEMENT_ERROR (src, LIBRARY, INIT,
         ("Could not set camera parameters: %d", err), (NULL));
