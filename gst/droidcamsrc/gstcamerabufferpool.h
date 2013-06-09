@@ -81,6 +81,10 @@ struct _GstCameraBufferPool {
 
   int frames;
   gboolean flushing;
+
+  GstClockTime buffer_duration;
+  int fps_n;
+  int fps_d;
 };
 
 struct _GstCameraBufferPoolClass {

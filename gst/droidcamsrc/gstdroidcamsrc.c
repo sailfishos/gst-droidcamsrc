@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <gst/gstnativebuffer.h>
 #include "cameraparams.h"
+#include <gst/video/video.h>
 
 #define DEFAULT_WIDTH         640
 #define DEFAULT_HEIGHT        480
@@ -89,7 +90,10 @@ static void gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src);
 
 static gboolean gst_droid_cam_src_vfsrc_activatepush (GstPad * pad,
     gboolean active);
+static gboolean gst_droid_cam_src_vfsrc_setcaps (GstPad * pad, GstCaps * caps);
+static GstCaps *gst_droid_cam_src_vfsrc_getcaps (GstPad * pad);
 static void gst_droid_cam_src_vfsrc_loop (gpointer data);
+static gboolean gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src);
 
 static void
 gst_droid_cam_src_base_init (gpointer gclass)
@@ -141,9 +145,11 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->vfsrc =
       gst_pad_new_from_static_template (&vfsrc_template,
       GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME);
-  gst_pad_use_fixed_caps (src->vfsrc);
+
   gst_pad_set_activatepush_function (src->vfsrc,
       gst_droid_cam_src_vfsrc_activatepush);
+  gst_pad_set_setcaps_function (src->vfsrc, gst_droid_cam_src_vfsrc_setcaps);
+  gst_pad_set_getcaps_function (src->vfsrc, gst_droid_cam_src_vfsrc_getcaps);
 
   gst_element_add_pad (GST_ELEMENT (src), src->vfsrc);
 }
@@ -173,6 +179,7 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
 {
   int err = 0;
   gchar *cam_id = NULL;
+  gchar *params = NULL;
 
   GST_DEBUG_OBJECT (src, "setup pipeline");
 
@@ -191,11 +198,16 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
 
   src->dev = (camera_device_t *) src->cam_dev;
 
-  if (!gst_droid_cam_src_set_callbacks (src)) {
-    goto cleanup;
+  params = src->dev->ops->get_parameters (src->dev);
+  src->camera_params = camera_params_from_string (params);
+
+  if (src->dev->ops->put_parameters) {
+    src->dev->ops->put_parameters (src->dev, params);
+  } else {
+    free (params);
   }
 
-  if (!gst_droid_cam_src_set_params (src)) {
+  if (!gst_droid_cam_src_set_callbacks (src)) {
     goto cleanup;
   }
 
@@ -315,19 +327,11 @@ gst_droid_cam_src_set_params (GstDroidCamSrc * src)
 
   GST_DEBUG_OBJECT (src, "set params");
 
-  params = src->dev->ops->get_parameters (src->dev);
-
-  src->camera_params = camera_params_from_string (params);
-
-  if (src->dev->ops->put_parameters) {
-    src->dev->ops->put_parameters (src->dev, params);
-  } else {
-    free (params);
-  }
-
   params = camera_params_to_string (src->camera_params);
   err = src->dev->ops->set_parameters (src->dev, params);
   free (params);
+
+  camera_params_dump (src->camera_params);
 
   if (err != 0) {
     GST_ELEMENT_ERROR (src, LIBRARY, INIT,
@@ -525,6 +529,17 @@ gst_droid_cam_src_vfsrc_activatepush (GstPad * pad, gboolean active)
     gboolean started;
     src->send_new_segment = TRUE;
 
+    /* First we do caps negotiation */
+    if (!gst_droid_cam_src_vfsrc_negotiate (src)) {
+      return FALSE;
+    }
+
+    /* Then we set camera parameters */
+    if (!gst_droid_cam_src_set_params (src)) {
+      return FALSE;
+    }
+
+    /* Then we start our task */
     GST_PAD_STREAM_LOCK (pad);
 
     started = gst_pad_start_task (pad, gst_droid_cam_src_vfsrc_loop, pad);
@@ -561,6 +576,149 @@ gst_droid_cam_src_vfsrc_activatepush (GstPad * pad, gboolean active)
   }
 
   return TRUE;
+}
+
+static GstCaps *
+gst_droid_cam_src_vfsrc_getcaps (GstPad * pad)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
+  GstCaps *caps = NULL;
+
+  GST_DEBUG_OBJECT (src, "vfsrc getcaps");
+
+  GST_OBJECT_LOCK (src);
+
+  if (src->camera_params) {
+    caps = camera_params_get_viewfinder_caps (src->camera_params);
+  } else {
+    caps = gst_static_pad_template_get_caps (&vfsrc_template);
+  }
+
+  GST_OBJECT_UNLOCK (src);
+
+  GST_DEBUG_OBJECT (src, "returning %" GST_PTR_FORMAT, caps);
+
+  return caps;
+}
+
+static gboolean
+gst_droid_cam_src_vfsrc_setcaps (GstPad * pad, GstCaps * caps)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
+  int width, height;
+  int fps_n, fps_d;
+  gdouble fps;
+
+  GST_DEBUG_OBJECT (src, "vfsrc setcaps %" GST_PTR_FORMAT, caps);
+
+  if (!caps || gst_caps_is_empty (caps) || gst_caps_is_any (caps)) {
+    /* We are happy. */
+    return TRUE;
+  }
+
+  if (!gst_video_format_parse_caps (caps, NULL, &width, &height)) {
+    GST_ELEMENT_ERROR (src, STREAM, FORMAT, ("Failed to parse caps"), (NULL));
+    return FALSE;
+  }
+
+  if (!gst_video_parse_caps_framerate (caps, &fps_n, &fps_d)) {
+    GST_ELEMENT_ERROR (src, STREAM, FORMAT, ("Failed to parse caps framerate"),
+        (NULL));
+    return FALSE;
+  }
+
+  if (width == 0 || height == 0) {
+    GST_ELEMENT_ERROR (src, STREAM, FORMAT, ("Invalid dimensions"), (NULL));
+    return FALSE;
+  }
+
+  gst_util_fraction_to_double (fps_n, fps_d, &fps);
+  camera_params_set_viewfinder_size (src->camera_params, width, height);
+  camera_params_set_viewfinder_fps (src->camera_params, fps);   /* TODO: properly convert to int */
+
+  if (gst_droid_cam_src_set_params (src)) {
+    /* buffer pool needs to know about FPS */
+
+    GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+    /* TODO: Make sure we are not overwriting a previous value. */
+    src->pool->buffer_duration =
+        gst_util_uint64_scale_int (GST_SECOND, fps_d, fps_n);
+    src->pool->fps_n = fps_n;
+    src->pool->fps_d = fps_d;
+    GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+static gboolean
+gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
+{
+  GstCaps *caps;
+  GstCaps *peer;
+  GstCaps *common;
+  gboolean ret;
+
+  GST_DEBUG_OBJECT (src, "vfsrc negotiate");
+
+  caps = gst_droid_cam_src_vfsrc_getcaps (src->vfsrc);
+  if (!caps || gst_caps_is_empty (caps)) {
+    GST_ELEMENT_ERROR (src, STREAM, FORMAT,
+        ("Failed to get any supported caps"), (NULL));
+
+    if (caps) {
+      gst_caps_unref (caps);
+    }
+
+    return FALSE;
+  }
+
+  GST_DEBUG_OBJECT (src, "caps %" GST_PTR_FORMAT, caps);
+
+  peer = gst_pad_peer_get_caps_reffed (src->vfsrc);
+
+  if (!peer || gst_caps_is_empty (peer) || gst_caps_is_any (peer)) {
+    if (peer) {
+      gst_caps_unref (peer);
+    }
+
+    gst_caps_unref (caps);
+
+    /* Use default. */
+    caps = gst_caps_new_simple ("video/x-android-buffer",
+        "width", G_TYPE_INT, DEFAULT_WIDTH,
+        "height", G_TYPE_INT, DEFAULT_HEIGHT,
+        "framerate", GST_TYPE_FRACTION, DEFAULT_FPS, 1, NULL);
+
+    GST_DEBUG_OBJECT (src, "using default caps %" GST_PTR_FORMAT, caps);
+
+    ret = gst_pad_set_caps (src->vfsrc, caps);
+    gst_caps_unref (caps);
+
+    return ret;
+  }
+
+  GST_DEBUG_OBJECT (src, "peer caps %" GST_PTR_FORMAT, peer);
+
+  common = gst_caps_intersect (caps, peer);
+
+  GST_DEBUG_OBJECT (src, "caps intersection %" GST_PTR_FORMAT, common);
+
+  gst_caps_unref (caps);
+  gst_caps_unref (peer);
+
+  if (!gst_caps_is_fixed (common)) {
+    /* TODO: set a fixate caps function */
+    gst_pad_fixate_caps (src->vfsrc, common);
+  }
+
+  ret = gst_pad_set_caps (src->vfsrc, common);
+
+  gst_caps_unref (common);
+
+  return ret;
 }
 
 static void

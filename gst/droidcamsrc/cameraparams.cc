@@ -131,6 +131,11 @@ camera_params_set(void *p, const char *key, const char *val)
 
     values.push_back(val);
 
+    std::map<std::string, std::vector<std::string> >::iterator iter = params->items.find(key);
+    if (iter != params->items.end()) {
+      params->items.erase (iter);
+    }
+
     params->items.insert(std::pair<std::string, std::vector<std::string> >(key, values));
 }
 
@@ -195,6 +200,23 @@ camera_params_get_viewfinder_caps (void *p)
   gst_caps_do_simplify (caps);
 
   return caps;
+}
+
+void
+camera_params_set_viewfinder_size (void *p, int width, int height)
+{
+  std::stringstream stream;
+  stream << width << "x" << height;
+
+  camera_params_set(p, "preview-size", stream.str().c_str());
+}
+
+void
+camera_params_set_viewfinder_fps (void *p, int fps)
+{
+  std::stringstream stream;
+  stream << fps;
+  camera_params_set (p, "preview-frame-rate", stream.str().c_str());
 }
 
 G_END_DECLS;

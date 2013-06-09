@@ -142,8 +142,11 @@ gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
 
   caps = gst_caps_new_simple ("video/x-android-buffer",
       "width", G_TYPE_INT, pool->width,
-      "height", G_TYPE_INT, pool->height, NULL);
+      "height", G_TYPE_INT, pool->height,
+      "framerate", GST_TYPE_FRACTION, pool->fps_n, pool->fps_d, NULL);
+
   GST_DEBUG_OBJECT (pool, "setting buffer caps to %" GST_PTR_FORMAT, caps);
+
   gst_buffer_set_caps (GST_BUFFER (buffer), caps);
   gst_caps_unref (caps);
 
@@ -413,13 +416,17 @@ gst_camera_buffer_pool_set_buffer_metadata_unlocked (GstCameraBufferPool * pool,
 
     GST_OBJECT_UNLOCK (pool->src);
 
+    if (timestamp > pool->buffer_duration) {
+      timestamp -= pool->buffer_duration;
+    }
+
     GST_BUFFER_TIMESTAMP (buff) = timestamp;
 
     GST_LOG_OBJECT (pool, "buffer timestamp set to %" GST_TIME_FORMAT,
         GST_TIME_ARGS (timestamp));
   }
 
-  /* TODO: duration (Which depends on the frame rate :/) */
+  GST_BUFFER_DURATION (buff) = pool->buffer_duration;
 }
 
 static int
@@ -518,8 +525,11 @@ gst_camera_buffer_pool_set_timestamp (struct preview_stream_ops *w,
 static void
 gst_camera_buffer_pool_init (GstCameraBufferPool * pool)
 {
+  pool->buffer_duration = GST_CLOCK_TIME_NONE;
   pool->flushing = TRUE;
   pool->frames = 0;
+  pool->fps_n = 0;
+  pool->fps_d = 0;
 
   g_mutex_init (&pool->lock);
 
