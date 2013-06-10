@@ -185,6 +185,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->mode = DEFAULT_MODE;
   src->pool = NULL;
   src->camera_params = NULL;
+  src->events = NULL;
 
   src->vfsrc =
       gst_pad_new_from_static_template (&vfsrc_template,
@@ -206,6 +207,14 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
 static void
 gst_droid_cam_src_finalize (GObject * object)
 {
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (object);
+
+  if (src->events) {
+    g_list_foreach (src->events, (GFunc) gst_event_unref, NULL);
+    g_list_free (src->events);
+    src->events = NULL;
+  }
+
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
@@ -557,7 +566,12 @@ gst_droid_cam_src_send_event (GstElement * element, GstEvent * event)
     case GST_EVENT_CUSTOM_BOTH_OOB:
       if (GST_EVENT_IS_SERIALIZED (event)) {
         GST_DEBUG_OBJECT (src, "queueing event %p", event);
-        /* TODO: */
+
+        GST_OBJECT_LOCK (src);
+        src->events = g_list_append (src->events, event);
+        GST_OBJECT_UNLOCK (src);
+        event = NULL;
+
       } else {
         ret = gst_pad_push_event (src->vfsrc, event);
         GST_DEBUG_OBJECT (src, "pushing event %p", event);
@@ -911,6 +925,7 @@ gst_droid_cam_src_vfsrc_loop (gpointer data)
   GstCameraBufferPool *pool = gst_camera_buffer_pool_ref (src->pool);
   GstNativeBuffer *buff;
   GstFlowReturn ret;
+  GList *events = NULL;
 
   GST_DEBUG_OBJECT (src, "loop");
 
@@ -967,6 +982,25 @@ push_buffer:
       GST_WARNING_OBJECT (src, "failed to push new segment");
     }
   }
+
+  GST_OBJECT_LOCK (src);
+
+  if (src->events) {
+    events = src->events;
+    src->events = NULL;
+  }
+
+  GST_OBJECT_UNLOCK (src);
+
+  while (events) {
+    GstEvent *ev = g_list_nth_data (events, 0);
+    events = g_list_remove (events, ev);
+    GST_DEBUG_OBJECT (src, "pushed event %" GST_PTR_FORMAT, ev);
+
+    gst_pad_push_event (src->vfsrc, ev);
+  }
+
+  g_list_free (events);
 
   ret = gst_pad_push (pad, GST_BUFFER (buff));
   if (ret != GST_FLOW_OK) {

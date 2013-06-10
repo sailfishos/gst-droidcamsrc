@@ -59,6 +59,8 @@ struct _GstDroidCamSrc {
   gint camera_device;
   gint mode;
 
+  GList *events;
+
   GstPad *vfsrc;
   gboolean send_new_segment;
 };
