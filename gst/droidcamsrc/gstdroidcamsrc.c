@@ -34,10 +34,13 @@
 #include <gst/gstnativebuffer.h>
 #include "cameraparams.h"
 #include <gst/video/video.h>
+#include "enums.h"
 
 #define DEFAULT_WIDTH         640
 #define DEFAULT_HEIGHT        480
 #define DEFAULT_FPS           30
+
+#define DEFAULT_CAMERA_DEVICE 0
 
 GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
@@ -71,6 +74,11 @@ GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_VIDEO_PAD_NAME,
     GST_STATIC_CAPS_ANY);
 
 static void gst_droid_cam_src_finalize (GObject * object);
+static void gst_droid_cam_src_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec);
+static void gst_droid_cam_src_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec);
+
 static GstStateChangeReturn gst_droid_cam_src_change_state (GstElement *
     element, GstStateChange transition);
 static gboolean gst_droid_cam_src_send_event (GstElement * element,
@@ -101,6 +109,13 @@ static gboolean gst_droid_cam_src_vfsrc_query (GstPad * pad, GstQuery * query);
 static void gst_droid_cam_src_vfsrc_loop (gpointer data);
 static gboolean gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src);
 
+enum
+{
+  PROP_0,
+  PROP_CAMERA_DEVICE,
+  N_PROPS,
+};
+
 static void
 gst_droid_cam_src_base_init (gpointer gclass)
 {
@@ -129,12 +144,21 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
   GstElementClass *element_class = (GstElementClass *) klass;
 
   gobject_class->finalize = gst_droid_cam_src_finalize;
+  gobject_class->get_property = gst_droid_cam_src_get_property;
+  gobject_class->set_property = gst_droid_cam_src_set_property;
+
   element_class->change_state =
       GST_DEBUG_FUNCPTR (gst_droid_cam_src_change_state);
   element_class->send_event = GST_DEBUG_FUNCPTR (gst_droid_cam_src_send_event);
   element_class->get_query_types =
       GST_DEBUG_FUNCPTR (gst_droid_cam_src_get_query_types);
   element_class->query = GST_DEBUG_FUNCPTR (gst_droid_cam_src_query);
+
+  g_object_class_install_property (gobject_class, PROP_CAMERA_DEVICE,
+      g_param_spec_enum ("camera-device", "Camera device",
+          "Defines which camera device should be used",
+          GST_TYPE_DROID_CAM_SRC_CAMERA_DEVICE,
+          DEFAULT_CAMERA_DEVICE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 
 static void
@@ -147,7 +171,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->dev = NULL;
   src->hwmod = NULL;
   src->cam_dev = NULL;
-  src->camera_device = 0;
+  src->camera_device = DEFAULT_CAMERA_DEVICE;
   src->pool = NULL;
   src->camera_params = NULL;
 
@@ -171,6 +195,39 @@ gst_droid_cam_src_finalize (GObject * object)
 {
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
+
+static void
+gst_droid_cam_src_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (object);
+
+  switch (prop_id) {
+    case PROP_CAMERA_DEVICE:
+      g_value_set_enum (value, src->camera_device);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_droid_cam_src_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (object);
+
+  switch (prop_id) {
+    case PROP_CAMERA_DEVICE:
+      src->camera_device = g_value_get_enum (value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
 
 static gboolean
 gst_droid_cam_src_construct_pipeline (GstDroidCamSrc * src)

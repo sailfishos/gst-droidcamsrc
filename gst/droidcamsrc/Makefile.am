@@ -4,7 +4,8 @@ libgstdroidcamsrc_la_SOURCES =  plugin.c \
 				gstdroidcamsrc.c \
 				gstcameramemory.c \
 				gstcamerabufferpool.c \
-				cameraparams.cc
+				cameraparams.cc \
+				enums.c
 
 libgstdroidcamsrc_la_CFLAGS = $(GST_CFLAGS) -I/usr/include/android/ -Iandroid/
 libgstdroidcamsrc_la_CXXFLAGS = $(GST_CFLAGS) -I/usr/include/android/ -Iandroid/
@@ -17,4 +18,5 @@ noinst_HEADERS = android/camera.h \
 		 gstdroidcamsrc.h \
 		 gstcameramemory.h \
 		 gstcamerabufferpool.h \
-		 cameraparams.h
+		 cameraparams.h \
+		 enums.h
