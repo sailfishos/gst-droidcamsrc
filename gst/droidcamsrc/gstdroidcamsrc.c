@@ -56,7 +56,7 @@ static GstStaticPadTemplate vfsrc_template =
 GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME,
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("video/x-android-buffer, "
+    GST_STATIC_CAPS (GST_NATIVE_BUFFER_NAME ","
         "framerate = (fraction) [ 0, MAX ], "
         "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ] "));
 
@@ -856,7 +856,7 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
     gst_caps_unref (caps);
 
     /* Use default. */
-    caps = gst_caps_new_simple ("video/x-android-buffer",
+    caps = gst_caps_new_simple (GST_NATIVE_BUFFER_NAME,
         "width", G_TYPE_INT, DEFAULT_WIDTH,
         "height", G_TYPE_INT, DEFAULT_HEIGHT,
         "framerate", GST_TYPE_FRACTION, DEFAULT_FPS, 1, NULL);
