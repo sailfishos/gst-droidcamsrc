@@ -41,6 +41,7 @@
 #define DEFAULT_FPS           30
 
 #define DEFAULT_CAMERA_DEVICE 0
+#define DEFAULT_MODE          MODE_IMAGE
 
 GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
@@ -113,6 +114,7 @@ enum
 {
   PROP_0,
   PROP_CAMERA_DEVICE,
+  PROP_MODE,
   N_PROPS,
 };
 
@@ -159,6 +161,12 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
           "Defines which camera device should be used",
           GST_TYPE_DROID_CAM_SRC_CAMERA_DEVICE,
           DEFAULT_CAMERA_DEVICE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_MODE,
+      g_param_spec_enum ("mode", "Mode",
+          "The capture mode (still image capture or video recording)",
+          gst_camerabin_mode_get_type (),
+          DEFAULT_MODE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 
 static void
@@ -172,6 +180,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->hwmod = NULL;
   src->cam_dev = NULL;
   src->camera_device = DEFAULT_CAMERA_DEVICE;
+  src->mode = DEFAULT_MODE;
   src->pool = NULL;
   src->camera_params = NULL;
 
@@ -206,6 +215,11 @@ gst_droid_cam_src_get_property (GObject * object, guint prop_id,
     case PROP_CAMERA_DEVICE:
       g_value_set_enum (value, src->camera_device);
       break;
+
+    case PROP_MODE:
+      g_value_set_enum (value, src->mode);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -222,6 +236,11 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
     case PROP_CAMERA_DEVICE:
       src->camera_device = g_value_get_enum (value);
       break;
+
+    case PROP_MODE:
+      src->mode = g_value_get_enum (value);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;

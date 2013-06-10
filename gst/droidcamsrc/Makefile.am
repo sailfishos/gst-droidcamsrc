@@ -9,7 +9,7 @@ libgstdroidcamsrc_la_SOURCES =  plugin.c \
 
 libgstdroidcamsrc_la_CFLAGS = $(GST_CFLAGS) -I/usr/include/android/ -Iandroid/
 libgstdroidcamsrc_la_CXXFLAGS = $(GST_CFLAGS) -I/usr/include/android/ -Iandroid/
-libgstdroidcamsrc_la_LIBADD = $(GST_LIBS) -lhardware -lgstgralloc -lgstnativebuffer
+libgstdroidcamsrc_la_LIBADD = $(GST_LIBS) -lhardware -lgstgralloc -lgstnativebuffer -lgstbasecamerabinsrc-0.10
 libgstdroidcamsrc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 libgstdroidcamsrc_la_LIBTOOLFLAGS = --tag=disable-static
 
