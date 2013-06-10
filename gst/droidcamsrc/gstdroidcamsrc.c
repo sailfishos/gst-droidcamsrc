@@ -107,6 +107,8 @@ static gboolean gst_droid_cam_src_vfsrc_setcaps (GstPad * pad, GstCaps * caps);
 static GstCaps *gst_droid_cam_src_vfsrc_getcaps (GstPad * pad);
 static const GstQueryType *gst_droid_cam_src_vfsrc_query_type (GstPad * pad);
 static gboolean gst_droid_cam_src_vfsrc_query (GstPad * pad, GstQuery * query);
+static void gst_droid_cam_src_vfsrc_fixatecaps (GstPad * pad, GstCaps * caps);
+
 static void gst_droid_cam_src_vfsrc_loop (gpointer data);
 static gboolean gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src);
 
@@ -195,6 +197,8 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   gst_pad_set_query_type_function (src->vfsrc,
       gst_droid_cam_src_vfsrc_query_type);
   gst_pad_set_query_function (src->vfsrc, gst_droid_cam_src_vfsrc_query);
+  gst_pad_set_fixatecaps_function (src->vfsrc,
+      gst_droid_cam_src_vfsrc_fixatecaps);
 
   gst_element_add_pad (GST_ELEMENT (src), src->vfsrc);
 }
@@ -753,6 +757,25 @@ gst_droid_cam_src_vfsrc_query (GstPad * pad, GstQuery * query)
   return gst_droid_cam_src_query (GST_PAD_PARENT (pad), query);
 }
 
+static void
+gst_droid_cam_src_vfsrc_fixatecaps (GstPad * pad, GstCaps * caps)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
+  GstStructure *s;
+
+  GST_DEBUG_OBJECT (src, "fixatecaps %" GST_PTR_FORMAT, caps);
+
+  gst_caps_truncate (caps);
+
+  s = gst_caps_get_structure (caps, 0);
+
+  gst_structure_fixate_field_nearest_int (s, "width", DEFAULT_WIDTH);
+  gst_structure_fixate_field_nearest_int (s, "height", DEFAULT_HEIGHT);
+  gst_structure_fixate_field_nearest_fraction (s, "framerate", DEFAULT_FPS, 1);
+
+  GST_DEBUG_OBJECT (src, "caps now is %" GST_PTR_FORMAT, caps);
+}
+
 static gboolean
 gst_droid_cam_src_vfsrc_setcaps (GstPad * pad, GstCaps * caps)
 {
@@ -870,7 +893,6 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
   }
 
   if (!gst_caps_is_fixed (common)) {
-    /* TODO: set a fixate caps function */
     gst_pad_fixate_caps (src->vfsrc, common);
   }
 
