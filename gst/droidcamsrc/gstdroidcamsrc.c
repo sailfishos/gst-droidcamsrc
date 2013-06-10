@@ -759,7 +759,7 @@ gst_droid_cam_src_vfsrc_setcaps (GstPad * pad, GstCaps * caps)
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
   int width, height;
   int fps_n, fps_d;
-  gdouble fps;
+  int fps;
 
   GST_DEBUG_OBJECT (src, "vfsrc setcaps %" GST_PTR_FORMAT, caps);
 
