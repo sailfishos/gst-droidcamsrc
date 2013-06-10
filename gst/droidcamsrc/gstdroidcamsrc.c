@@ -785,6 +785,14 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
   gst_caps_unref (caps);
   gst_caps_unref (peer);
 
+  if (gst_caps_is_empty (common)) {
+    GST_ELEMENT_ERROR (src, STREAM, FORMAT, ("No common caps"), (NULL));
+
+    gst_caps_unref (common);
+
+    return FALSE;
+  }
+
   if (!gst_caps_is_fixed (common)) {
     /* TODO: set a fixate caps function */
     gst_pad_fixate_caps (src->vfsrc, common);
