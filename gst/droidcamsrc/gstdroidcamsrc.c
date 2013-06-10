@@ -610,7 +610,7 @@ gst_droid_cam_src_query (GstElement * element, GstQuery * query)
       }
 
       GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
-      gst_query_set_latency (query, TRUE, 0,
+      gst_query_set_latency (query, TRUE, src->pool->buffer_duration,
           src->pool->count * src->pool->buffer_duration);
 
       ret = TRUE;
