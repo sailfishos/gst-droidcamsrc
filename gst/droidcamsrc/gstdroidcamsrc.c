@@ -75,8 +75,10 @@ static GstStateChangeReturn gst_droid_cam_src_change_state (GstElement *
     element, GstStateChange transition);
 static gboolean gst_droid_cam_src_send_event (GstElement * element,
     GstEvent * event);
-static const GstQueryType *gst_droid_cam_src_get_query_types (GstElement *element);
-static gboolean gst_droid_cam_src_query (GstElement *element, GstQuery *query);
+static const GstQueryType *gst_droid_cam_src_get_query_types (GstElement *
+    element);
+static gboolean gst_droid_cam_src_query (GstElement * element,
+    GstQuery * query);
 
 static gboolean gst_droid_cam_src_construct_pipeline (GstDroidCamSrc * src);
 static void gst_droid_cam_src_destruct_pipeline (GstDroidCamSrc * src);
@@ -94,8 +96,8 @@ static gboolean gst_droid_cam_src_vfsrc_activatepush (GstPad * pad,
     gboolean active);
 static gboolean gst_droid_cam_src_vfsrc_setcaps (GstPad * pad, GstCaps * caps);
 static GstCaps *gst_droid_cam_src_vfsrc_getcaps (GstPad * pad);
-static const GstQueryType *gst_droid_cam_src_vfsrc_query_type (GstPad *pad);
-static gboolean gst_droid_cam_src_vfsrc_query (GstPad *pad, GstQuery *query);
+static const GstQueryType *gst_droid_cam_src_vfsrc_query_type (GstPad * pad);
+static gboolean gst_droid_cam_src_vfsrc_query (GstPad * pad, GstQuery * query);
 static void gst_droid_cam_src_vfsrc_loop (gpointer data);
 static gboolean gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src);
 
@@ -130,7 +132,8 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
   element_class->change_state =
       GST_DEBUG_FUNCPTR (gst_droid_cam_src_change_state);
   element_class->send_event = GST_DEBUG_FUNCPTR (gst_droid_cam_src_send_event);
-  element_class->get_query_types = GST_DEBUG_FUNCPTR (gst_droid_cam_src_get_query_types);
+  element_class->get_query_types =
+      GST_DEBUG_FUNCPTR (gst_droid_cam_src_get_query_types);
   element_class->query = GST_DEBUG_FUNCPTR (gst_droid_cam_src_query);
 }
 
@@ -156,7 +159,8 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
       gst_droid_cam_src_vfsrc_activatepush);
   gst_pad_set_setcaps_function (src->vfsrc, gst_droid_cam_src_vfsrc_setcaps);
   gst_pad_set_getcaps_function (src->vfsrc, gst_droid_cam_src_vfsrc_getcaps);
-  gst_pad_set_query_type_function (src->vfsrc, gst_droid_cam_src_vfsrc_query_type);
+  gst_pad_set_query_type_function (src->vfsrc,
+      gst_droid_cam_src_vfsrc_query_type);
   gst_pad_set_query_function (src->vfsrc, gst_droid_cam_src_vfsrc_query);
 
   gst_element_add_pad (GST_ELEMENT (src), src->vfsrc);
@@ -493,7 +497,7 @@ gst_droid_cam_src_send_event (GstElement * element, GstEvent * event)
 }
 
 static const GstQueryType *
-gst_droid_cam_src_get_query_types (GstElement *element)
+gst_droid_cam_src_get_query_types (GstElement * element)
 {
   static const GstQueryType query_types[] = {
     GST_QUERY_LATENCY,
@@ -504,7 +508,7 @@ gst_droid_cam_src_get_query_types (GstElement *element)
 }
 
 static gboolean
-gst_droid_cam_src_query (GstElement *element, GstQuery *query)
+gst_droid_cam_src_query (GstElement * element, GstQuery * query)
 {
   gboolean ret = TRUE;
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (element);
@@ -512,35 +516,35 @@ gst_droid_cam_src_query (GstElement *element, GstQuery *query)
   GST_DEBUG_OBJECT (src, "query");
 
   switch (GST_QUERY_TYPE (query)) {
-  case GST_QUERY_LATENCY:
-    if (!src->dev) {
-      GST_WARNING_OBJECT (src,
-			  "Can't give latency since device isn't open");
-      ret = FALSE;
-      break;
-    }
+    case GST_QUERY_LATENCY:
+      if (!src->dev) {
+        GST_WARNING_OBJECT (src, "Can't give latency since device isn't open");
+        ret = FALSE;
+        break;
+      }
 
-    GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+      GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
 
-    if (src->pool->buffer_duration == GST_CLOCK_TIME_NONE) {
+      if (src->pool->buffer_duration == GST_CLOCK_TIME_NONE) {
+        GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+        GST_WARNING_OBJECT (src,
+            "Can't give latency since frame duration isn't known");
+        ret = FALSE;
+
+        break;
+      }
+
       GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+      gst_query_set_latency (query, TRUE, 0,
+          src->pool->count * src->pool->buffer_duration);
 
-      GST_WARNING_OBJECT (src,
-			  "Can't give latency since frame duration isn't known");
-      ret = FALSE;
-
+      ret = TRUE;
       break;
-    }
 
-    GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
-    gst_query_set_latency (query, TRUE, 0, src->pool->count * src->pool->buffer_duration);
-
-    ret = TRUE;
-    break;
-
-  default:
-    ret = FALSE;
-    break;
+    default:
+      ret = FALSE;
+      break;
   }
 
   return ret;
@@ -662,13 +666,13 @@ gst_droid_cam_src_vfsrc_getcaps (GstPad * pad)
 }
 
 static const GstQueryType *
-gst_droid_cam_src_vfsrc_query_type (GstPad *pad)
+gst_droid_cam_src_vfsrc_query_type (GstPad * pad)
 {
   return gst_droid_cam_src_get_query_types (GST_PAD_PARENT (pad));
 }
 
 static gboolean
-gst_droid_cam_src_vfsrc_query (GstPad *pad, GstQuery *query)
+gst_droid_cam_src_vfsrc_query (GstPad * pad, GstQuery * query)
 {
   return gst_droid_cam_src_query (GST_PAD_PARENT (pad), query);
 }
