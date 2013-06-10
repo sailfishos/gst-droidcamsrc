@@ -89,9 +89,6 @@ static const GstQueryType *gst_droid_cam_src_get_query_types (GstElement *
 static gboolean gst_droid_cam_src_query (GstElement * element,
     GstQuery * query);
 
-static gboolean gst_droid_cam_src_construct_pipeline (GstDroidCamSrc * src);
-static void gst_droid_cam_src_destruct_pipeline (GstDroidCamSrc * src);
-
 static gboolean gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_set_params (GstDroidCamSrc * src);
@@ -258,21 +255,6 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
-}
-
-
-static gboolean
-gst_droid_cam_src_construct_pipeline (GstDroidCamSrc * src)
-{
-  // TODO:
-
-  return TRUE;
-}
-
-static void
-gst_droid_cam_src_destruct_pipeline (GstDroidCamSrc * src)
-{
-  // TODO:
 }
 
 static gboolean
@@ -454,8 +436,7 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
 
   switch (transition) {
     case GST_STATE_CHANGE_NULL_TO_READY:
-      if (!gst_droid_cam_src_construct_pipeline (src)
-          || !gst_droid_cam_src_probe_camera (src)) {
+      if (!gst_droid_cam_src_probe_camera (src)) {
         ret = GST_STATE_CHANGE_FAILURE;
       }
 
@@ -503,7 +484,6 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
 
     case GST_STATE_CHANGE_READY_TO_NULL:
       gst_droid_cam_src_tear_down_pipeline (src);
-      gst_droid_cam_src_destruct_pipeline (src);
 
       break;
 
