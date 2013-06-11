@@ -578,18 +578,18 @@ gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
 
   g_ptr_array_free (pool->buffers, TRUE);
 
-  g_mutex_free (&pool->hal_lock);
-  g_cond_free (&pool->hal_cond);
+  g_mutex_clear (&pool->hal_lock);
+  g_cond_clear (&pool->hal_cond);
   g_queue_free (pool->hal_queue);
 
-  g_mutex_free (&pool->app_lock);
-  g_cond_free (&pool->app_cond);
+  g_mutex_clear (&pool->app_lock);
+  g_cond_clear (&pool->app_cond);
   g_queue_free (pool->app_queue);
 
   gst_gralloc_unref (pool->gralloc);
   gst_object_unref (pool->src);
 
-  g_mutex_free (&pool->lock);
+  g_mutex_clear (&pool->lock);
 
   GST_MINI_OBJECT_CLASS (parent_class)->finalize (GST_MINI_OBJECT (pool));
 }

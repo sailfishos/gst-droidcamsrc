@@ -212,7 +212,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->events = NULL;
 
   src->capturing = FALSE;
-  src->capturing_mutex = g_mutex_new ();
+  g_mutex_init (&src->capturing_mutex);
 
   src->image_renegotiate = TRUE;
 
@@ -236,7 +236,7 @@ gst_droid_cam_src_finalize (GObject * object)
     src->events = NULL;
   }
 
-  g_mutex_free (src->capturing_mutex);
+  g_mutex_clear (&src->capturing_mutex);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -692,12 +692,12 @@ gst_droid_cam_src_start_capture (GstDroidCamSrc * src)
 {
   GST_DEBUG_OBJECT (src, "start capture");
 
-  g_mutex_lock (src->capturing_mutex);
+  g_mutex_lock (&src->capturing_mutex);
 
   if (src->capturing) {
     GST_WARNING_OBJECT (src, "Capturing already ongoing");
 
-    g_mutex_unlock (src->capturing_mutex);
+    g_mutex_unlock (&src->capturing_mutex);
 
     /* notify camerabin2 that the capture failed */
     GST_ELEMENT_WARNING (src, RESOURCE, BUSY, (NULL), (NULL));
@@ -713,19 +713,19 @@ gst_droid_cam_src_start_capture (GstDroidCamSrc * src)
       src->capturing = FALSE;
       g_object_notify (G_OBJECT (src), "ready-for-capture");
 
-      g_mutex_unlock (src->capturing_mutex);
+      g_mutex_unlock (&src->capturing_mutex);
 
       /* notify camerabin2 that the capture failed */
       GST_ELEMENT_WARNING (src, RESOURCE, FAILED, (NULL), (NULL));
 
     } else {
-      g_mutex_unlock (src->capturing_mutex);
+      g_mutex_unlock (&src->capturing_mutex);
     }
   } else if (src->mode == MODE_VIDEO) {
     /* TODO: */
-    g_mutex_unlock (src->capturing_mutex);
+    g_mutex_unlock (&src->capturing_mutex);
   } else {
-    g_mutex_unlock (src->capturing_mutex);
+    g_mutex_unlock (&src->capturing_mutex);
     g_assert_not_reached ();
   }
 }
