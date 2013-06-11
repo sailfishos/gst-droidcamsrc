@@ -734,7 +734,7 @@ gst_droid_cam_src_vfsrc_getcaps (GstPad * pad)
 
   GST_OBJECT_UNLOCK (src);
 
-  GST_DEBUG_OBJECT (src, "returning %" GST_PTR_FORMAT, caps);
+  GST_LOG_OBJECT (src, "returning %" GST_PTR_FORMAT, caps);
 
   return caps;
 }
@@ -757,7 +757,7 @@ gst_droid_cam_src_vfsrc_fixatecaps (GstPad * pad, GstCaps * caps)
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
   GstStructure *s;
 
-  GST_DEBUG_OBJECT (src, "fixatecaps %" GST_PTR_FORMAT, caps);
+  GST_LOG_OBJECT (src, "fixatecaps %" GST_PTR_FORMAT, caps);
 
   gst_caps_truncate (caps);
 
@@ -844,7 +844,7 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
     return FALSE;
   }
 
-  GST_DEBUG_OBJECT (src, "caps %" GST_PTR_FORMAT, caps);
+  GST_LOG_OBJECT (src, "caps %" GST_PTR_FORMAT, caps);
 
   peer = gst_pad_peer_get_caps_reffed (src->vfsrc);
 
@@ -873,7 +873,7 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
 
   common = gst_caps_intersect (caps, peer);
 
-  GST_DEBUG_OBJECT (src, "caps intersection %" GST_PTR_FORMAT, common);
+  GST_LOG_OBJECT (src, "caps intersection %" GST_PTR_FORMAT, common);
 
   gst_caps_unref (caps);
   gst_caps_unref (peer);
