@@ -95,6 +95,9 @@ static gboolean gst_droid_cam_src_probe_camera (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src);
 static void gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src);
 
+static void gst_droid_cam_src_start_capture (GstDroidCamSrc * src);
+static void gst_droid_cam_src_stop_capture (GstDroidCamSrc * src);
+
 enum
 {
   PROP_0,
@@ -103,6 +106,17 @@ enum
   PROP_READY_FOR_CAPTURE,
   N_PROPS,
 };
+
+enum
+{
+  /* action signals */
+  START_CAPTURE_SIGNAL,
+  STOP_CAPTURE_SIGNAL,
+  /* emit signals */
+  LAST_SIGNAL
+};
+
+static guint droidcamsrc_signals[LAST_SIGNAL];
 
 static void
 gst_droid_cam_src_base_init (gpointer gclass)
@@ -161,6 +175,20 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
       g_param_spec_boolean ("ready-for-capture", "Ready for capture",
           "Element is ready for starting another capture",
           TRUE, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
+  droidcamsrc_signals[START_CAPTURE_SIGNAL] =
+      g_signal_new_class_handler ("start-capture",
+      G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
+      G_CALLBACK (gst_droid_cam_src_start_capture),
+      NULL, NULL, g_cclosure_marshal_VOID__VOID, G_TYPE_NONE, 0);
+
+  droidcamsrc_signals[STOP_CAPTURE_SIGNAL] =
+      g_signal_new_class_handler ("stop-capture",
+      G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
+      G_CALLBACK (gst_droid_cam_src_stop_capture),
+      NULL, NULL, g_cclosure_marshal_VOID__VOID, G_TYPE_NONE, 0);
 }
 
 static void
@@ -645,4 +673,16 @@ gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src)
 
   /* TODO: Not sure this is correct */
   gst_camera_buffer_pool_unlock_hal_queue (src->pool);
+}
+
+static void
+gst_droid_cam_src_start_capture (GstDroidCamSrc * src)
+{
+  // TODO:
+}
+
+static void
+gst_droid_cam_src_stop_capture (GstDroidCamSrc * src)
+{
+  // TODO:
 }
