@@ -74,6 +74,8 @@ struct _GstDroidCamSrc {
 
   gboolean capturing;
   GMutex *capturing_mutex;
+
+  gboolean image_renegotiate;
 };
 
 struct _GstDroidCamSrcClass {

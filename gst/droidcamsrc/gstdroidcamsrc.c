@@ -99,6 +99,9 @@ static void gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src);
 static void gst_droid_cam_src_start_capture (GstDroidCamSrc * src);
 static void gst_droid_cam_src_stop_capture (GstDroidCamSrc * src);
 
+static gboolean gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc *
+    src);
+
 enum
 {
   PROP_0,
@@ -210,6 +213,8 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
 
   src->capturing = FALSE;
   src->capturing_mutex = g_mutex_new ();
+
+  src->image_renegotiate = TRUE;
 
   src->vfsrc = gst_vf_src_pad_new (&vfsrc_template,
       GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME);
@@ -505,6 +510,7 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
       break;
 
     case GST_STATE_CHANGE_PAUSED_TO_READY:
+      src->image_renegotiate = TRUE;
       /* TODO: is this the right thing to do? */
       src->capturing = FALSE;
       break;
@@ -703,10 +709,18 @@ gst_droid_cam_src_start_capture (GstDroidCamSrc * src)
   g_object_notify (G_OBJECT (src), "ready-for-capture");
 
   if (src->mode == MODE_IMAGE) {
-    /* Do we need to renegotiate ? */
+    if (!gst_droid_cam_src_start_image_capture_unlocked (src)) {
+      src->capturing = FALSE;
+      g_object_notify (G_OBJECT (src), "ready-for-capture");
 
-    /* start actual capturing */
-    g_mutex_unlock (src->capturing_mutex);
+      g_mutex_unlock (src->capturing_mutex);
+
+      /* notify camerabin2 that the capture failed */
+      GST_ELEMENT_WARNING (src, RESOURCE, FAILED, (NULL), (NULL));
+
+    } else {
+      g_mutex_unlock (src->capturing_mutex);
+    }
   } else if (src->mode == MODE_VIDEO) {
     /* TODO: */
     g_mutex_unlock (src->capturing_mutex);
@@ -729,4 +743,34 @@ gst_droid_cam_src_stop_capture (GstDroidCamSrc * src)
   } else {
     g_assert_not_reached ();
   }
+}
+
+/* */
+static gboolean
+gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
+{
+  int err;
+
+  GST_DEBUG_OBJECT (src, "start image capture unlocked");
+
+  /* Do we need to renegotiate ? */
+  if (src->image_renegotiate) {
+    if (!gst_img_src_pad_renegotiate (src->imgsrc)) {
+      GST_WARNING_OBJECT (src, "Failed to negotiate image capture caps");
+
+      return FALSE;
+    }
+
+    src->image_renegotiate = FALSE;
+  }
+
+  /* start actual capturing */
+  err = src->dev->ops->take_picture (src->dev);
+
+  if (err != 0) {
+    GST_WARNING_OBJECT (src, "failed to start image capture: %d", err);
+    return FALSE;
+  }
+
+  return TRUE;
 }

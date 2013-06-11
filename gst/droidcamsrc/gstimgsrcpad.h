@@ -25,6 +25,7 @@
 G_BEGIN_DECLS
 
 GstPad *gst_img_src_pad_new (GstStaticPadTemplate *pad_template, const char * name);
+gboolean gst_img_src_pad_renegotiate (GstPad * pad);
 
 G_END_DECLS
 

@@ -139,3 +139,15 @@ gst_droid_cam_src_imgsrc_activatepush (GstPad * pad, gboolean active)
   // TODO:
   return TRUE;
 }
+
+gboolean
+gst_img_src_pad_renegotiate (GstPad * pad)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_PAD_PARENT (pad));
+
+  GST_DEBUG_OBJECT (src, "renegotiate");
+
+  /* TODO: */
+
+  return TRUE;
+}
