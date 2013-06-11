@@ -68,6 +68,8 @@ struct _GstDroidCamSrc {
   GList *events;
 
   GstPad *vfsrc;
+  GstPad *imgsrc;
+
   gboolean send_new_segment;
 
   gboolean capturing;

@@ -17,37 +17,15 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __TEST_H__
-#define __TEST_H__
+#ifndef __GST_IMG_SRC_PAD_H__
+#define __GST_IMG_SRC_PAD_H__
 
 #include <gst/gst.h>
-#include <glib.h>
 
 G_BEGIN_DECLS
 
-typedef struct
-{
-  GMainLoop *loop;
-  GstElement *src;
-  GstElement *vf;
-  GstElement *vf_csp;
-  GstElement *vf_q;
-
-  GstElement *fs;
-  GstElement *fs_csp;
-  GstElement *fs_q;
-
-  GstElement *pipeline;
-
-  int ret;
-} TestPipeline;
-
-TestPipeline *test_pipeline_new (int argc, char *argv[]);
-
-int test_pipeline_exec (TestPipeline *pipeline, int timeout);
-
-void test_pipeline_free (TestPipeline *pipeline);
+GstPad *gst_img_src_pad_new (GstStaticPadTemplate *pad_template, const char * name);
 
 G_END_DECLS
 
-#endif /* __TEST_H__ */
+#endif /* __GST_IMG_SRC_PAD_H__ */

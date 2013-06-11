@@ -36,6 +36,7 @@
 #include <gst/video/video.h>
 #include "enums.h"
 #include "gstvfsrcpad.h"
+#include "gstimgsrcpad.h"
 
 #define DEFAULT_CAMERA_DEVICE 0
 #define DEFAULT_MODE          MODE_IMAGE
@@ -212,8 +213,11 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
 
   src->vfsrc = gst_vf_src_pad_new (&vfsrc_template,
       GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME);
-
   gst_element_add_pad (GST_ELEMENT (src), src->vfsrc);
+
+  src->imgsrc = gst_img_src_pad_new (&imgsrc_template,
+      GST_BASE_CAMERA_SRC_IMAGE_PAD_NAME);
+  gst_element_add_pad (GST_ELEMENT (src), src->imgsrc);
 }
 
 static void
@@ -501,6 +505,8 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
       break;
 
     case GST_STATE_CHANGE_PAUSED_TO_READY:
+      /* TODO: is this the right thing to do? */
+      src->capturing = FALSE;
       break;
 
     case GST_STATE_CHANGE_READY_TO_NULL:
@@ -678,11 +684,49 @@ gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src)
 static void
 gst_droid_cam_src_start_capture (GstDroidCamSrc * src)
 {
-  // TODO:
+  GST_DEBUG_OBJECT (src, "start capture");
+
+  g_mutex_lock (src->capturing_mutex);
+
+  if (src->capturing) {
+    GST_WARNING_OBJECT (src, "Capturing already ongoing");
+
+    g_mutex_unlock (src->capturing_mutex);
+
+    /* notify camerabin2 that the capture failed */
+    GST_ELEMENT_WARNING (src, RESOURCE, BUSY, (NULL), (NULL));
+
+    return;
+  }
+
+  src->capturing = TRUE;
+  g_object_notify (G_OBJECT (src), "ready-for-capture");
+
+  if (src->mode == MODE_IMAGE) {
+    /* Do we need to renegotiate ? */
+
+    /* start actual capturing */
+    g_mutex_unlock (src->capturing_mutex);
+  } else if (src->mode == MODE_VIDEO) {
+    /* TODO: */
+    g_mutex_unlock (src->capturing_mutex);
+  } else {
+    g_mutex_unlock (src->capturing_mutex);
+    g_assert_not_reached ();
+  }
 }
 
 static void
 gst_droid_cam_src_stop_capture (GstDroidCamSrc * src)
 {
-  // TODO:
+  GST_DEBUG_OBJECT (src, "stop capture");
+
+  if (src->mode == MODE_IMAGE) {
+    GST_DEBUG_OBJECT (src, "stop capture not needed for image mode");
+    return;
+  } else if (src->mode == MODE_VIDEO) {
+    /* TODO: video mode */
+  } else {
+    g_assert_not_reached ();
+  }
 }

@@ -17,37 +17,27 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __TEST_H__
-#define __TEST_H__
+#include "test.h"
 
-#include <gst/gst.h>
-#include <glib.h>
-
-G_BEGIN_DECLS
-
-typedef struct
+static gboolean
+start_image_capture (gpointer user_data)
 {
-  GMainLoop *loop;
-  GstElement *src;
-  GstElement *vf;
-  GstElement *vf_csp;
-  GstElement *vf_q;
+  TestPipeline *pipeline = (TestPipeline *) user_data;
 
-  GstElement *fs;
-  GstElement *fs_csp;
-  GstElement *fs_q;
+  g_signal_emit_by_name (pipeline->src, "start-capture", NULL);
 
-  GstElement *pipeline;
+  return FALSE;                 /* Bye! */
+}
 
-  int ret;
-} TestPipeline;
+int
+main (int argc, char *argv[])
+{
+  TestPipeline *pipeline = test_pipeline_new (argc, argv);
+  if (!pipeline) {
+    return 1;
+  }
 
-TestPipeline *test_pipeline_new (int argc, char *argv[]);
+  g_timeout_add (3000, start_image_capture, pipeline);
 
-int test_pipeline_exec (TestPipeline *pipeline, int timeout);
-
-void test_pipeline_free (TestPipeline *pipeline);
-
-G_END_DECLS
-
-#endif /* __TEST_H__ */
+  return test_pipeline_exec (pipeline, 10000);
+}

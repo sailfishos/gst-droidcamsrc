@@ -39,6 +39,23 @@ bus_call (GstBus * bus, GstMessage * msg, gpointer data)
   TestPipeline *pipeline = (TestPipeline *) data;
 
   switch (GST_MESSAGE_TYPE (msg)) {
+    case GST_MESSAGE_ELEMENT:{
+      const GstStructure *structure = gst_message_get_structure (msg);
+      const gchar *filename;
+
+      if (gst_structure_has_name (structure, "GstMultiFileSink")) {
+        filename = gst_structure_get_string (structure, "filename");
+        g_print
+            ("Got file save message from multifilesink, image %s has been saved",
+            filename);
+
+        gst_element_set_state (pipeline->fs, GST_STATE_NULL);
+        gst_element_set_locked_state (pipeline->fs, TRUE);
+      }
+
+      break;
+    }
+
     case GST_MESSAGE_EOS:
       g_print ("End of stream\n");
       pipeline->ret = 0;
@@ -90,11 +107,24 @@ bus_call (GstBus * bus, GstMessage * msg, gpointer data)
   return TRUE;
 }
 
+static gboolean
+imgsrc_buffer_probe (GstPad * pad, GstBuffer * buffer, gpointer user_data)
+{
+  TestPipeline *pipeline = (TestPipeline *) user_data;
+
+  gst_element_set_locked_state (pipeline->fs, FALSE);
+
+  gst_element_set_state (pipeline->fs, GST_STATE_PLAYING);
+
+  return TRUE;                  /* keep data. */
+}
+
 TestPipeline *
 test_pipeline_new (int argc, char *argv[])
 {
   GstBus *bus;
   TestPipeline *pipeline;
+  GstPad *pad;
 
   gst_init (&argc, &argv);
 
@@ -119,24 +149,69 @@ test_pipeline_new (int argc, char *argv[])
     goto error;
   }
 
-  pipeline->pipeline = gst_pipeline_new (NULL);
-
-  gst_bin_add_many (GST_BIN (pipeline->pipeline), pipeline->src,
-      pipeline->vf_csp, pipeline->vf, NULL);
-
-  if (!gst_element_link_pads (pipeline->src, "vfsrc", pipeline->vf_csp, "sink")) {
-    g_printerr ("Failed to link %s to capsfilter", CAMERA_SRC);
+  pipeline->vf_q = gst_element_factory_make ("queue", NULL);
+  if (!pipeline->vf_q) {
+    g_printerr ("Failed to create viewfinder queue");
     goto error;
   }
 
-  if (!gst_element_link (pipeline->vf_csp, pipeline->vf)) {
-    g_printerr ("Failed to link elements");
+  pipeline->fs = gst_element_factory_make ("multifilesink", NULL);
+  if (!pipeline->fs) {
+    g_printerr ("Failed to create multifilesink element");
+    goto error;
+  }
+
+  g_object_set (pipeline->fs, "async", FALSE, "post-messages", TRUE, NULL);
+  gst_element_set_locked_state (pipeline->fs, TRUE);
+
+  pipeline->fs_csp = gst_element_factory_make ("capsfilter", NULL);
+  if (!pipeline->fs_csp) {
+    g_printerr ("Failed to create image capture capsfilter element");
+    goto error;
+  }
+
+  pipeline->fs_q = gst_element_factory_make ("queue", NULL);
+  if (!pipeline->fs_q) {
+    g_printerr ("Failed to create image capture queue");
+    goto error;
+  }
+
+  pipeline->pipeline = gst_pipeline_new (NULL);
+
+  gst_bin_add_many (GST_BIN (pipeline->pipeline), pipeline->src,
+      pipeline->vf_csp, pipeline->vf, pipeline->vf_q,
+      pipeline->fs_csp, pipeline->fs, pipeline->fs_q, NULL);
+
+  if (!gst_element_link_pads (pipeline->src, "vfsrc", pipeline->vf_csp, "sink")) {
+    g_printerr ("Failed to link %s to viewfinder capsfilter", CAMERA_SRC);
+    goto error;
+  }
+
+  if (!gst_element_link_pads (pipeline->src, "imgsrc", pipeline->fs_csp,
+          "sink")) {
+    g_printerr ("Failed to link %s to image capture capsfilter", CAMERA_SRC);
+    goto error;
+  }
+
+  if (!gst_element_link_many (pipeline->vf_csp, pipeline->vf_q, pipeline->vf,
+          NULL)) {
+    g_printerr ("Failed to link viewfinder branch");
+    goto error;
+  }
+
+  if (!gst_element_link_many (pipeline->fs_csp, pipeline->fs_q, pipeline->fs,
+          NULL)) {
+    g_printerr ("Failed to link image capture branch");
     goto error;
   }
 
   bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline->pipeline));
   gst_bus_add_watch (bus, bus_call, pipeline);
   gst_object_unref (bus);
+
+  pad = gst_element_get_static_pad (pipeline->src, "imgsrc");
+  gst_pad_add_buffer_probe (pad, G_CALLBACK (imgsrc_buffer_probe), pipeline);
+  gst_object_unref (pad);
 
   return pipeline;
 
