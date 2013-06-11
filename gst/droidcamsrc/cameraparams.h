@@ -31,7 +31,9 @@ char *camera_params_to_string(void *params);
 void camera_params_dump(void *params);
 void camera_params_set(void *p, const char *key, const char *val);
 GstCaps *camera_params_get_viewfinder_caps (void *p);
+GstCaps *camera_params_get_capture_caps (void *p);
 void camera_params_set_viewfinder_size (void *p, int width, int height);
+void camera_params_set_capture_size (void *p, int width, int height);
 void camera_params_set_viewfinder_fps (void *p, int fps);
 
 G_END_DECLS

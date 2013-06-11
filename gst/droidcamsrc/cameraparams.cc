@@ -191,7 +191,7 @@ camera_params_get_viewfinder_caps (void *p)
       if (!f) {
         continue;
       }
-
+      // TODO: hardcoded
       GstStructure *s = gst_structure_new ("video/x-android-buffer",
           "width", G_TYPE_INT, width,
           "height", G_TYPE_INT, height,
@@ -207,6 +207,58 @@ camera_params_get_viewfinder_caps (void *p)
   return caps;
 }
 
+GstCaps *
+camera_params_get_capture_caps (void *p)
+{
+  camera_params *params = reinterpret_cast < camera_params * >(p);
+
+  std::map < std::string, std::vector < std::string > >::iterator sizes =
+      params->items.find ("picture-size-values");
+
+  if (sizes == params->items.end ()) {
+    return gst_caps_new_empty ();
+  }
+
+  GstCaps *caps = gst_caps_new_empty ();
+
+  for (std::vector < std::string >::iterator size = sizes->second.begin ();
+      size != sizes->second.end (); size++) {
+    std::stringstream stream;
+    stream.str (*size);
+    std::vector < std::string > d;
+    std::string item;
+
+    while (getline (stream, item, 'x')) {
+      d.push_back (item);
+    }
+
+    if (d.size () != 2) {
+      continue;
+    }
+
+    int width = atoi (d[0].c_str ());
+    int height = atoi (d[1].c_str ());
+
+    if (!width || !height) {
+      continue;
+    }
+
+    // TODO: hardcoded structure name
+    // TODO: what to set framerate to ?
+    GstStructure *s = gst_structure_new ("image/jpeg",
+        "width", G_TYPE_INT, width,
+        "height", G_TYPE_INT, height,
+        "framerate", GST_TYPE_FRACTION, 30, 1,
+        NULL);
+
+    gst_caps_append_structure (caps, s);
+  }
+
+  gst_caps_do_simplify (caps);
+
+  return caps;
+}
+
 void
 camera_params_set_viewfinder_size (void *p, int width, int height)
 {
@@ -214,6 +266,15 @@ camera_params_set_viewfinder_size (void *p, int width, int height)
   stream << width << "x" << height;
 
   camera_params_set (p, "preview-size", stream.str ().c_str ());
+}
+
+void
+camera_params_set_capture_size (void *p, int width, int height)
+{
+  std::stringstream stream;
+  stream << width << "x" << height;
+
+  camera_params_set (p, "picture-size", stream.str ().c_str ());
 }
 
 void
