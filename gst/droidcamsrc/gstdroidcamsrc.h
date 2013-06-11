@@ -38,6 +38,12 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_DROID_CAM_SRC))
 #define GST_IS_DROID_CAM_SRC_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_DROID_CAM_SRC))
+#define GST_DROID_CAM_SRC_GET_CLASS(obj) \
+  (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_DROID_CAM_SRC, GstDroidCamSrcClass))
+
+#define DEFAULT_VF_WIDTH         640
+#define DEFAULT_VF_HEIGHT        480
+#define DEFAULT_VF_FPS           30
 
 typedef struct _GstDroidCamSrc GstDroidCamSrc;
 typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;
@@ -67,6 +73,8 @@ struct _GstDroidCamSrc {
 
 struct _GstDroidCamSrcClass {
   GstBinClass parent_class;
+
+  gboolean (* set_camera_params) (GstDroidCamSrc *src);
 };
 
 GType gst_droid_cam_src_get_type (void);
