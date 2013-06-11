@@ -59,10 +59,8 @@ static gboolean
 gst_droid_cam_src_vfsrc_activatepush (GstPad * pad, gboolean active)
 {
   GstDroidCamSrc *src;
-  GstDroidCamSrcClass *klass;
 
   src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
-  klass = GST_DROID_CAM_SRC_GET_CLASS (src);
 
   GST_DEBUG_OBJECT (src, "vfsrc activatepush: %d", active);
 
@@ -75,17 +73,11 @@ gst_droid_cam_src_vfsrc_activatepush (GstPad * pad, gboolean active)
       return FALSE;
     }
 
-    /* Then we set camera parameters */
-    if (!klass->set_camera_params (src)) {
-      return FALSE;
-    }
-
     /* Then we start our task */
     GST_PAD_STREAM_LOCK (pad);
 
     started = gst_pad_start_task (pad, gst_droid_cam_src_vfsrc_loop, pad);
     if (!started) {
-
       GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
       src->pool->flushing = TRUE;
       GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
@@ -374,8 +366,11 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
   GstCaps *peer;
   GstCaps *common;
   gboolean ret;
+  GstDroidCamSrcClass *klass;
 
   GST_DEBUG_OBJECT (src, "vfsrc negotiate");
+
+  klass = GST_DROID_CAM_SRC_GET_CLASS (src);
 
   caps = gst_droid_cam_src_vfsrc_getcaps (src->vfsrc);
   if (!caps || gst_caps_is_empty (caps)) {
@@ -386,7 +381,8 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
       gst_caps_unref (caps);
     }
 
-    return FALSE;
+    ret = FALSE;
+    goto out;
   }
 
   GST_LOG_OBJECT (src, "caps %" GST_PTR_FORMAT, caps);
@@ -411,7 +407,7 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
     ret = gst_pad_set_caps (src->vfsrc, caps);
     gst_caps_unref (caps);
 
-    return ret;
+    goto out;
   }
 
   GST_DEBUG_OBJECT (src, "peer caps %" GST_PTR_FORMAT, peer);
@@ -428,7 +424,8 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
 
     gst_caps_unref (common);
 
-    return FALSE;
+    ret = FALSE;
+    goto out;
   }
 
   if (!gst_caps_is_fixed (common)) {
@@ -438,6 +435,12 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
   ret = gst_pad_set_caps (src->vfsrc, common);
 
   gst_caps_unref (common);
+
+out:
+  if (ret) {
+    /* set camera parameters */
+    ret = klass->set_camera_params (src);
+  }
 
   return ret;
 }
