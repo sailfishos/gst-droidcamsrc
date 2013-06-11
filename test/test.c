@@ -124,8 +124,12 @@ test_pipeline_new (int argc, char *argv[])
   gst_bin_add_many (GST_BIN (pipeline->pipeline), pipeline->src, pipeline->csp,
       pipeline->sink, NULL);
 
-  if (gst_element_link_many (pipeline->src, pipeline->csp, pipeline->sink,
-          NULL) != TRUE) {
+  if (!gst_element_link_pads (pipeline->src, "vfsrc", pipeline->csp, "sink")) {
+    g_printerr ("Failed to link %s to capsfilter", CAMERA_SRC);
+    goto error;
+  }
+
+  if (!gst_element_link (pipeline->csp, pipeline->sink)) {
     g_printerr ("Failed to link elements");
     goto error;
   }
