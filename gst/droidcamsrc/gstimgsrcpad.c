@@ -81,7 +81,9 @@ gst_droid_cam_src_imgsrc_setcaps (GstPad * pad, GstCaps * caps)
     return FALSE;
   }
 
+  GST_OBJECT_LOCK (src);
   camera_params_set_capture_size (src->camera_params, width, height);
+  GST_OBJECT_UNLOCK (src);
 
   return klass->set_camera_params (src);
 }

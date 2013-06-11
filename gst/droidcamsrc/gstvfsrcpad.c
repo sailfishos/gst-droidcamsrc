@@ -145,8 +145,11 @@ gst_droid_cam_src_vfsrc_setcaps (GstPad * pad, GstCaps * caps)
   }
 
   fps = fps_n / fps_d;
+
+  GST_OBJECT_LOCK (src);
   camera_params_set_viewfinder_size (src->camera_params, width, height);
   camera_params_set_viewfinder_fps (src->camera_params, fps);
+  GST_OBJECT_UNLOCK (src);
 
   if (klass->set_camera_params (src)) {
     /* buffer pool needs to know about FPS */
