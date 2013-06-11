@@ -29,8 +29,8 @@ typedef struct
 {
   GMainLoop *loop;
   GstElement *src;
-  GstElement *sink;
-  GstElement *csp;
+  GstElement *vf;
+  GstElement *vf_csp;
   GstElement *pipeline;
   int ret;
 } TestPipeline;

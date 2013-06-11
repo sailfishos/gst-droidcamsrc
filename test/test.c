@@ -107,29 +107,29 @@ test_pipeline_new (int argc, char *argv[])
     goto error;
   }
 
-  pipeline->csp = gst_element_factory_make ("capsfilter", NULL);
-  if (!pipeline->csp) {
-    g_printerr ("Failed to create capsfilter element");
+  pipeline->vf_csp = gst_element_factory_make ("capsfilter", NULL);
+  if (!pipeline->vf_csp) {
+    g_printerr ("Failed to create viewfinder capsfilter element");
     goto error;
   }
 
-  pipeline->sink = gst_element_factory_make (VIDEO_SINK, NULL);
-  if (!pipeline->sink) {
+  pipeline->vf = gst_element_factory_make (VIDEO_SINK, NULL);
+  if (!pipeline->vf) {
     g_printerr ("Failed to create %s element", VIDEO_SINK);
     goto error;
   }
 
   pipeline->pipeline = gst_pipeline_new (NULL);
 
-  gst_bin_add_many (GST_BIN (pipeline->pipeline), pipeline->src, pipeline->csp,
-      pipeline->sink, NULL);
+  gst_bin_add_many (GST_BIN (pipeline->pipeline), pipeline->src,
+      pipeline->vf_csp, pipeline->vf, NULL);
 
-  if (!gst_element_link_pads (pipeline->src, "vfsrc", pipeline->csp, "sink")) {
+  if (!gst_element_link_pads (pipeline->src, "vfsrc", pipeline->vf_csp, "sink")) {
     g_printerr ("Failed to link %s to capsfilter", CAMERA_SRC);
     goto error;
   }
 
-  if (!gst_element_link (pipeline->csp, pipeline->sink)) {
+  if (!gst_element_link (pipeline->vf_csp, pipeline->vf)) {
     g_printerr ("Failed to link elements");
     goto error;
   }
@@ -159,8 +159,8 @@ test_pipeline_free (TestPipeline * pipeline)
   }
 
   gst_object_unref (pipeline->src);
-  gst_object_unref (pipeline->csp);
-  gst_object_unref (pipeline->sink);
+  gst_object_unref (pipeline->vf_csp);
+  gst_object_unref (pipeline->vf);
   g_free (pipeline);
 }
 
