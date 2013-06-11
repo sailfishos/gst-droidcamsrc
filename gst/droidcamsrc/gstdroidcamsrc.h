@@ -69,6 +69,9 @@ struct _GstDroidCamSrc {
 
   GstPad *vfsrc;
   gboolean send_new_segment;
+
+  gboolean capturing;
+  GMutex *capturing_mutex;
 };
 
 struct _GstDroidCamSrcClass {
