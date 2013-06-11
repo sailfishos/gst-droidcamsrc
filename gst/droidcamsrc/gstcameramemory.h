@@ -25,7 +25,11 @@
 
 G_BEGIN_DECLS
 
-camera_memory_t *gst_camera_memory_get (int fd, size_t buf_size, unsigned int num_bufs, void *data);
+camera_memory_t *gst_camera_memory_get (int fd, size_t buf_size,
+    unsigned int num_bufs, void *data);
+
+void *gst_camera_memory_get_data (const camera_memory_t *data,
+    int index, int * size);
 
 G_END_DECLS
 

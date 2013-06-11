@@ -104,3 +104,26 @@ gst_camera_memory_release (struct camera_memory *mem)
 
   mem = NULL;
 }
+
+void *
+gst_camera_memory_get_data (const camera_memory_t * data, int index, int *size)
+{
+  unsigned long offset;
+  void *buffer;
+
+  GstCameraMemory *cm = (GstCameraMemory *) data->handle;
+
+  if (index >= cm->num_bufs) {
+    return NULL;
+  }
+
+  offset = index * cm->buf_size;
+
+  buffer = cm->mem.data;
+
+  buffer += offset;
+
+  *size = cm->buf_size;
+
+  return buffer;
+}
