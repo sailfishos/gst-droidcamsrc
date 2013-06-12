@@ -382,6 +382,7 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
 
   if (!buff) {
     /* TODO: Not really sure what to do here */
+    GST_DEBUG_OBJECT (pool, "no buffer");
     GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
     return -EINVAL;
   }

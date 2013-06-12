@@ -901,6 +901,8 @@ gst_droid_cam_src_finish_capture (GstDroidCamSrc * src)
         (NULL));
   }
 
+  GST_DEBUG_OBJECT (src, "finish capture done");
+
   return FALSE;                 /* Don't call us again */
 }
 
