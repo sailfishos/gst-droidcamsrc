@@ -102,6 +102,10 @@ static void gst_droid_cam_src_stop_capture (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc *
     src);
 
+static void gst_droid_cam_src_data_callback (int32_t msg_type,
+    const camera_memory_t * mem, unsigned int index,
+    camera_frame_metadata_t * metadata, void *user_data);
+
 enum
 {
   PROP_0,
@@ -216,6 +220,11 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
 
   src->image_renegotiate = TRUE;
 
+  g_mutex_init (&src->img_lock);
+  g_cond_init (&src->img_cond);
+  src->img_task_running = FALSE;
+  src->img_queue = g_queue_new ();
+
   src->vfsrc = gst_vf_src_pad_new (&vfsrc_template,
       GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME);
   gst_element_add_pad (GST_ELEMENT (src), src->vfsrc);
@@ -237,6 +246,11 @@ gst_droid_cam_src_finalize (GObject * object)
   }
 
   g_mutex_clear (&src->capturing_mutex);
+
+  g_mutex_clear (&src->img_lock);
+  g_cond_clear (&src->img_cond);
+
+  g_queue_free_full (src->img_queue, (GDestroyNotify) gst_buffer_unref);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -417,8 +431,7 @@ gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src)
 
   /* TODO: Complete this when we know what we need */
   src->dev->ops->set_callbacks (src->dev, NULL, // notify_cb
-      NULL,                     // data_cb
-      NULL,                     // data_cb_timestamp
+      gst_droid_cam_src_data_callback, NULL,    // data_cb_timestamp
       gst_camera_memory_get, src);
 
   err = src->dev->ops->set_preview_window (src->dev, &src->pool->window);
@@ -512,6 +525,7 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       src->image_renegotiate = TRUE;
       /* TODO: is this the right thing to do? */
+      /* TODO: do we need locking here? */
       src->capturing = FALSE;
       break;
 
@@ -665,6 +679,9 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
   GST_DEBUG_OBJECT (src, "start pipeline");
 
   src->dev->ops->enable_msg_type (src->dev, CAMERA_MSG_ALL_MSGS);
+  src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_PREVIEW_FRAME);
+  src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_RAW_IMAGE);
+
   err = src->dev->ops->start_preview (src->dev);
   if (err != 0) {
     GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("Could not start camera: %d", err),
@@ -773,4 +790,47 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
   }
 
   return TRUE;
+}
+
+static void
+gst_droid_cam_src_data_callback (int32_t msg_type, const camera_memory_t * mem,
+    unsigned int index, camera_frame_metadata_t * metadata, void *user_data)
+{
+  GstDroidCamSrc *src = (GstDroidCamSrc *) user_data;
+
+  GST_DEBUG_OBJECT (src, "data callback");
+
+  switch (msg_type) {
+    case CAMERA_MSG_COMPRESSED_IMAGE:{
+      int size;
+      void *data = gst_camera_memory_get_data (mem, index, &size);
+      if (!data) {
+
+        /* TODO: error */
+
+        return;
+      }
+
+      GstBuffer *buffer = gst_buffer_new_and_alloc (size);
+      memcpy (GST_BUFFER_DATA (buffer), data, size);
+      GST_BUFFER_SIZE (buffer) = size;
+      /* TODO: more metadata */
+
+      GST_OBJECT_LOCK (src);
+      g_mutex_lock (&src->img_lock);
+
+      g_queue_push_tail (src->img_queue, buffer);
+      g_cond_signal (&src->img_cond);
+
+      g_mutex_unlock (&src->img_lock);
+
+      GST_OBJECT_UNLOCK (src);
+
+      break;
+    }
+
+    default:
+      GST_WARNING_OBJECT (src, "unknown message 0x%x from HAL", msg_type);
+      break;
+  }
 }

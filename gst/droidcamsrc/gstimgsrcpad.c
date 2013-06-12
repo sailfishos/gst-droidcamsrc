@@ -31,6 +31,9 @@ static void gst_droid_cam_src_imgsrc_fixatecaps (GstPad * pad, GstCaps * caps);
 static gboolean gst_droid_cam_src_imgsrc_activatepush (GstPad * pad,
     gboolean active);
 
+static void gst_droid_cam_src_imgsrc_loop (gpointer data);
+static gboolean gst_droid_cam_src_imgsrc_negotiate (GstDroidCamSrc * src);
+
 GstPad *
 gst_img_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
 {
@@ -60,8 +63,6 @@ gst_img_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
 static gboolean
 gst_droid_cam_src_imgsrc_setcaps (GstPad * pad, GstCaps * caps)
 {
-  // TODO:
-
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
 
@@ -91,8 +92,6 @@ gst_droid_cam_src_imgsrc_setcaps (GstPad * pad, GstCaps * caps)
 static GstCaps *
 gst_droid_cam_src_imgsrc_getcaps (GstPad * pad)
 {
-  // TODO:
-
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
   GstCaps *caps = NULL;
 
@@ -116,8 +115,6 @@ gst_droid_cam_src_imgsrc_getcaps (GstPad * pad)
 static void
 gst_droid_cam_src_imgsrc_fixatecaps (GstPad * pad, GstCaps * caps)
 {
-  // TODO:
-
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
   GstStructure *s;
 
@@ -138,7 +135,60 @@ gst_droid_cam_src_imgsrc_fixatecaps (GstPad * pad, GstCaps * caps)
 static gboolean
 gst_droid_cam_src_imgsrc_activatepush (GstPad * pad, gboolean active)
 {
-  // TODO:
+  GstDroidCamSrc *src;
+
+  src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
+
+  GST_DEBUG_OBJECT (src, "imgsrc activatepush: %d", active);
+
+  if (active) {
+    gboolean started;
+
+    /* First we do caps negotiation */
+    if (!gst_droid_cam_src_imgsrc_negotiate (src)) {
+      return FALSE;
+    }
+
+    /* Then we start our task */
+    GST_PAD_STREAM_LOCK (pad);
+
+    g_mutex_lock (&src->img_lock);
+    src->img_task_running = TRUE;
+
+    started = gst_pad_start_task (pad, gst_droid_cam_src_imgsrc_loop, pad);
+    if (!started) {
+      src->img_task_running = FALSE;
+
+      g_mutex_unlock (&src->img_lock);
+
+      GST_PAD_STREAM_UNLOCK (pad);
+
+      GST_ERROR_OBJECT (src, "Failed to start task");
+      gst_pad_stop_task (pad);
+
+      return FALSE;
+    }
+
+    g_mutex_unlock (&src->img_lock);
+
+    GST_PAD_STREAM_UNLOCK (pad);
+
+  } else {
+    GST_DEBUG_OBJECT (src, "stopping task");
+
+    g_mutex_lock (&src->img_lock);
+
+    src->img_task_running = FALSE;
+
+    g_cond_signal (&src->img_cond);
+
+    g_mutex_unlock (&src->img_lock);
+
+    gst_pad_stop_task (pad);
+
+    GST_DEBUG_OBJECT (src, "stopped task");
+  }
+
   return TRUE;
 }
 
@@ -149,7 +199,123 @@ gst_img_src_pad_renegotiate (GstPad * pad)
 
   GST_DEBUG_OBJECT (src, "renegotiate");
 
-  /* TODO: */
+  return gst_droid_cam_src_imgsrc_negotiate (src);
+}
 
-  return TRUE;
+static void
+gst_droid_cam_src_imgsrc_loop (gpointer data)
+{
+#if 0
+  GstPad *pad = (GstPad *) data;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
+  GstBuffer *buffer;
+  GstFlowReturn ret;
+
+  GST_DEBUG_OBJECT (src, "loop");
+
+  g_mutex_lock (&src->img_lock);
+
+  if (src->img_task_running) {
+    g_mutex_unlock (&src->img_lock);
+
+    GST_DEBUG_OBJECT (src, "task not running");
+    return;
+  }
+
+  if (src->img_queue->length > 0) {
+    buffer = g_queue_pop_head (src->img_queue);
+    g_mutex_unlock (&src->img_lock);
+
+    goto push_buffer;
+  }
+  // TODO:
+
+flushing:
+#endif
+}
+
+static gboolean
+gst_droid_cam_src_imgsrc_negotiate (GstDroidCamSrc * src)
+{
+  GstCaps *caps;
+  GstCaps *peer;
+  GstCaps *common;
+  gboolean ret;
+  GstDroidCamSrcClass *klass;
+
+  GST_DEBUG_OBJECT (src, "imgsrc negotiate");
+
+  klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+
+  caps = gst_droid_cam_src_imgsrc_getcaps (src->imgsrc);
+  if (!caps || gst_caps_is_empty (caps)) {
+    GST_ELEMENT_ERROR (src, STREAM, FORMAT,
+        ("Failed to get any supported caps"), (NULL));
+
+    if (caps) {
+      gst_caps_unref (caps);
+    }
+
+    ret = FALSE;
+    goto out;
+  }
+
+  GST_LOG_OBJECT (src, "caps %" GST_PTR_FORMAT, caps);
+
+  peer = gst_pad_peer_get_caps_reffed (src->imgsrc);
+
+  if (!peer || gst_caps_is_empty (peer) || gst_caps_is_any (peer)) {
+    if (peer) {
+      gst_caps_unref (peer);
+    }
+
+    gst_caps_unref (caps);
+
+    /* Use default. */
+    caps = gst_caps_new_simple ("image/jpeg",
+        "width", G_TYPE_INT, DEFAULT_VF_WIDTH,
+        "height", G_TYPE_INT, DEFAULT_VF_HEIGHT,
+        "framerate", GST_TYPE_FRACTION, DEFAULT_VF_FPS, 1, NULL);
+
+    GST_DEBUG_OBJECT (src, "using default caps %" GST_PTR_FORMAT, caps);
+
+    ret = gst_pad_set_caps (src->imgsrc, caps);
+    gst_caps_unref (caps);
+
+    goto out;
+  }
+
+  GST_DEBUG_OBJECT (src, "peer caps %" GST_PTR_FORMAT, peer);
+
+  common = gst_caps_intersect (caps, peer);
+
+  GST_LOG_OBJECT (src, "caps intersection %" GST_PTR_FORMAT, common);
+
+  gst_caps_unref (caps);
+  gst_caps_unref (peer);
+
+  if (gst_caps_is_empty (common)) {
+    GST_ELEMENT_ERROR (src, STREAM, FORMAT, ("No common caps"), (NULL));
+
+    gst_caps_unref (common);
+
+    ret = FALSE;
+    goto out;
+  }
+
+  if (!gst_caps_is_fixed (common)) {
+    gst_pad_fixate_caps (src->imgsrc, common);
+  }
+
+  ret = gst_pad_set_caps (src->imgsrc, common);
+
+  gst_caps_unref (common);
+
+out:
+  if (ret) {
+    /* set camera parameters */
+    ret = klass->set_camera_params (src);
+  }
+
+  return ret;
 }

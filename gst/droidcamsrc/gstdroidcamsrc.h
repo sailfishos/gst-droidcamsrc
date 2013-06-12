@@ -76,6 +76,11 @@ struct _GstDroidCamSrc {
   GMutex capturing_mutex;
 
   gboolean image_renegotiate;
+
+  GQueue *img_queue;
+  GCond img_cond;
+  GMutex img_lock;
+  gboolean img_task_running;
 };
 
 struct _GstDroidCamSrcClass {
