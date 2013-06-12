@@ -203,6 +203,8 @@ gst_droid_cam_src_vfsrc_query_type (GstPad * pad)
     return NULL;
   }
 
+  GST_DEBUG_OBJECT (parent, "vfsrc query type");
+
   parent_class = GST_ELEMENT_GET_CLASS (parent);
   queries = parent_class->get_query_types (parent);
 
@@ -222,6 +224,8 @@ gst_droid_cam_src_vfsrc_query (GstPad * pad, GstQuery * query)
   if (!parent) {
     return FALSE;
   }
+
+  GST_DEBUG_OBJECT (parent, "vfsrc query");
 
   parent_class = GST_ELEMENT_GET_CLASS (parent);
   ret = parent_class->query (parent, query);
