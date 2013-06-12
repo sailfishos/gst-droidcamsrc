@@ -30,6 +30,8 @@ static GstCaps *gst_droid_cam_src_imgsrc_getcaps (GstPad * pad);
 static void gst_droid_cam_src_imgsrc_fixatecaps (GstPad * pad, GstCaps * caps);
 static gboolean gst_droid_cam_src_imgsrc_activatepush (GstPad * pad,
     gboolean active);
+static const GstQueryType *gst_droid_cam_src_imgsrc_query_type (GstPad * pad);
+static gboolean gst_droid_cam_src_imgsrc_query (GstPad * pad, GstQuery * query);
 
 static void gst_droid_cam_src_imgsrc_loop (gpointer data);
 static gboolean gst_droid_cam_src_imgsrc_negotiate (GstDroidCamSrc * src);
@@ -49,13 +51,8 @@ gst_img_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
   gst_pad_set_activatepush_function (pad,
       gst_droid_cam_src_imgsrc_activatepush);
 
-  /*
-     // TODO: ?
-     gst_pad_set_query_type_function (pad, gst_droid_cam_src_imgsrc_query_type);
-     gst_pad_set_query_function (pad, gst_droid_cam_src_imgsrc_query);
-
-   */
-
+  gst_pad_set_query_type_function (pad, gst_droid_cam_src_imgsrc_query_type);
+  gst_pad_set_query_function (pad, gst_droid_cam_src_imgsrc_query);
 
   return pad;
 }
@@ -316,6 +313,50 @@ out:
     /* set camera parameters */
     ret = klass->set_camera_params (src);
   }
+
+  return ret;
+}
+
+static const GstQueryType *
+gst_droid_cam_src_imgsrc_query_type (GstPad * pad)
+{
+  GstElement *parent;
+  GstElementClass *parent_class;
+  const GstQueryType *queries;
+
+  parent = GST_ELEMENT (gst_pad_get_parent (pad));
+  if (!parent) {
+    return NULL;
+  }
+
+  GST_DEBUG_OBJECT (parent, "imgsrc query type");
+
+  parent_class = GST_ELEMENT_GET_CLASS (parent);
+  queries = parent_class->get_query_types (parent);
+
+  gst_object_unref (parent);
+
+  return queries;
+}
+
+static gboolean
+gst_droid_cam_src_imgsrc_query (GstPad * pad, GstQuery * query)
+{
+  GstElement *parent;
+  GstElementClass *parent_class;
+  gboolean ret;
+
+  parent = GST_ELEMENT (gst_pad_get_parent (pad));
+  if (!parent) {
+    return FALSE;
+  }
+
+  GST_DEBUG_OBJECT (parent, "imgsrc query");
+
+  parent_class = GST_ELEMENT_GET_CLASS (parent);
+  ret = parent_class->query (parent, query);
+
+  gst_object_unref (parent);
 
   return ret;
 }
