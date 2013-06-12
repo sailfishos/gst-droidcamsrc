@@ -186,9 +186,14 @@ gst_camera_buffer_pool_set_buffers_geometry (struct preview_stream_ops *w,
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
-  GST_DEBUG_OBJECT (pool, "set buffers geometry");
+  GST_DEBUG_OBJECT (pool, "set buffers geometry from %dx%d@0x%x to %dx%d@0x%x",
+      pool->width, pool->height, pool->format, width, height, format);
 
-  if (pool->width != 0 || pool->height != 0 || pool->format != 0) {
+  if (pool->width == width && pool->height == height && pool->format == format) {
+    GST_DEBUG_OBJECT (pool, "same geometry and format. Nothing to do");
+    GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+    return 0;
+  } else if (pool->width != 0 || pool->height != 0 || pool->format != 0) {
     GST_WARNING_OBJECT (pool, "geometry previously set");
 
     GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
@@ -217,9 +222,13 @@ gst_camera_buffer_pool_set_buffer_count (struct preview_stream_ops *w,
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
-  GST_DEBUG_OBJECT (pool, "set buffer count");
+  GST_DEBUG_OBJECT (pool, "set buffer count from %d to %d", pool->count, count);
 
-  if (pool->count != 0) {
+  if (pool->count == count) {
+    GST_DEBUG_OBJECT (pool, "same count. Nothing to do");
+    GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+    return 0;
+  } else if (pool->count != 0) {
     GST_WARNING_OBJECT (pool, "count previously set");
 
     GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
@@ -276,9 +285,13 @@ gst_camera_buffer_pool_set_usage (struct preview_stream_ops *w, int usage)
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
-  GST_DEBUG_OBJECT (pool, "set usage");
+  GST_DEBUG_OBJECT (pool, "set usage from 0x%x to 0x%x", pool->usage, usage);
 
-  if (pool->usage != 0) {
+  if (pool->usage == usage) {
+    GST_DEBUG_OBJECT (pool, "same usage. Nothing to do");
+    GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+    return 0;
+  } else if (pool->usage != 0) {
     GST_WARNING_OBJECT (pool, "usage previously set");
 
     GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
