@@ -108,7 +108,7 @@ bus_call (GstBus * bus, GstMessage * msg, gpointer data)
 }
 
 static gboolean
-imgsrc_buffer_probe (GstPad * pad, GstBuffer * buffer, gpointer user_data)
+imgsrc_data_probe (GstPad * pad, GstMiniObject * obj, gpointer user_data)
 {
   TestPipeline *pipeline = (TestPipeline *) user_data;
 
@@ -210,7 +210,7 @@ test_pipeline_new (int argc, char *argv[])
   gst_object_unref (bus);
 
   pad = gst_element_get_static_pad (pipeline->src, "imgsrc");
-  gst_pad_add_buffer_probe (pad, G_CALLBACK (imgsrc_buffer_probe), pipeline);
+  gst_pad_add_data_probe (pad, G_CALLBACK (imgsrc_data_probe), pipeline);
   gst_object_unref (pad);
 
   return pipeline;
