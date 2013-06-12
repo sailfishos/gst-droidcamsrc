@@ -158,7 +158,8 @@ test_pipeline_new (int argc, char *argv[])
     goto error;
   }
 
-  g_object_set (pipeline->fs, "async", FALSE, "post-messages", TRUE, NULL);
+  g_object_set (pipeline->fs, "async", FALSE, "post-messages", TRUE, "location",
+      "%05d.jpg", NULL);
   gst_element_set_locked_state (pipeline->fs, TRUE);
 
   pipeline->fs_csp = gst_element_factory_make ("capsfilter", NULL);

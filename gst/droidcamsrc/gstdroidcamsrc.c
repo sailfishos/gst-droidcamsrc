@@ -106,6 +106,12 @@ static void gst_droid_cam_src_data_callback (int32_t msg_type,
     const camera_memory_t * mem, unsigned int index,
     camera_frame_metadata_t * metadata, void *user_data);
 
+static void gst_droid_cam_src_handle_compressed_image (GstDroidCamSrc * src,
+    const camera_memory_t * mem, unsigned int index,
+    camera_frame_metadata_t * metadata);
+
+static gboolean gst_droid_cam_src_finish_capture (GstDroidCamSrc * src);
+
 enum
 {
   PROP_0,
@@ -793,6 +799,112 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
 }
 
 static void
+gst_droid_cam_src_handle_compressed_image (GstDroidCamSrc * src,
+    const camera_memory_t * mem, unsigned int index,
+    camera_frame_metadata_t * metadata)
+{
+  GstBuffer *buffer;
+  void *data;
+  int size;
+  GstCaps *caps;
+  GstClock *clock;
+  GstClockTime timestamp;
+
+  GST_DEBUG_OBJECT (src, "handle compressed image");
+
+  data = gst_camera_memory_get_data (mem, index, &size);
+
+  if (!data) {
+    GST_ELEMENT_ERROR (src, LIBRARY, ENCODE, ("Empty data from camera HAL"),
+        (NULL));
+    goto stop;
+  }
+
+  buffer = gst_buffer_new_and_alloc (size);
+  caps = gst_pad_get_negotiated_caps (src->imgsrc);
+  if (!caps) {
+    GST_WARNING_OBJECT (src, "No negotiated caps on imgsrc pad");
+  } else {
+    GST_LOG_OBJECT (src, "setting caps to %" GST_PTR_FORMAT, caps);
+    gst_buffer_set_caps (buffer, caps);
+    gst_caps_unref (caps);
+  }
+
+  memcpy (GST_BUFFER_DATA (buffer), data, size);
+  GST_BUFFER_SIZE (buffer) = size;
+
+  GST_OBJECT_LOCK (src);
+  clock = GST_ELEMENT_CLOCK (src);
+
+  if (clock) {
+    timestamp = gst_clock_get_time (clock) - GST_ELEMENT (src)->base_time;
+  } else {
+    timestamp = GST_CLOCK_TIME_NONE;
+  }
+
+  GST_BUFFER_TIMESTAMP (buffer) = timestamp;
+
+  GST_LOG_OBJECT (src, "buffer timestamp set to %" GST_TIME_FORMAT,
+      GST_TIME_ARGS (timestamp));
+
+  g_mutex_lock (&src->img_lock);
+
+  g_queue_push_tail (src->img_queue, buffer);
+  g_cond_signal (&src->img_cond);
+
+  g_mutex_unlock (&src->img_lock);
+
+  GST_OBJECT_UNLOCK (src);
+  goto invoke_finish;
+
+stop:
+  g_mutex_lock (&src->img_lock);
+
+  src->img_task_running = FALSE;
+  g_cond_signal (&src->img_cond);
+
+  g_mutex_unlock (&src->img_lock);
+
+  gst_pad_stop_task (src->imgsrc);
+
+  GST_DEBUG_OBJECT (src, "stopped imgsrc task");
+
+invoke_finish:
+  /*
+   * TODO: If we ever discover that we cannot invoke gst_droid_cam_src_finish_capture()
+   * from the data callback then we can use that.
+   * g_timeout_add_full (G_PRIORITY_HIGH, 0, (GSourceFunc)gst_droid_cam_src_finish_capture,
+   * src, NULL);
+   */
+
+  gst_droid_cam_src_finish_capture (src);
+}
+
+static gboolean
+gst_droid_cam_src_finish_capture (GstDroidCamSrc * src)
+{
+  int err;
+
+  GST_DEBUG_OBJECT (src, "finish capture");
+
+  g_mutex_lock (&src->capturing_mutex);
+
+  src->capturing = FALSE;
+  g_object_notify (G_OBJECT (src), "ready-for-capture");
+
+  g_mutex_unlock (&src->capturing_mutex);
+
+  err = src->dev->ops->start_preview (src->dev);
+
+  if (err != 0) {
+    GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("Could not start camera: %d", err),
+        (NULL));
+  }
+
+  return FALSE;                 /* Don't call us again */
+}
+
+static void
 gst_droid_cam_src_data_callback (int32_t msg_type, const camera_memory_t * mem,
     unsigned int index, camera_frame_metadata_t * metadata, void *user_data)
 {
@@ -801,33 +913,9 @@ gst_droid_cam_src_data_callback (int32_t msg_type, const camera_memory_t * mem,
   GST_DEBUG_OBJECT (src, "data callback");
 
   switch (msg_type) {
-    case CAMERA_MSG_COMPRESSED_IMAGE:{
-      int size;
-      void *data = gst_camera_memory_get_data (mem, index, &size);
-      if (!data) {
-
-        /* TODO: error */
-
-        return;
-      }
-
-      GstBuffer *buffer = gst_buffer_new_and_alloc (size);
-      memcpy (GST_BUFFER_DATA (buffer), data, size);
-      GST_BUFFER_SIZE (buffer) = size;
-      /* TODO: more metadata */
-
-      GST_OBJECT_LOCK (src);
-      g_mutex_lock (&src->img_lock);
-
-      g_queue_push_tail (src->img_queue, buffer);
-      g_cond_signal (&src->img_cond);
-
-      g_mutex_unlock (&src->img_lock);
-
-      GST_OBJECT_UNLOCK (src);
-
+    case CAMERA_MSG_COMPRESSED_IMAGE:
+      gst_droid_cam_src_handle_compressed_image (src, mem, index, metadata);
       break;
-    }
 
     default:
       GST_WARNING_OBJECT (src, "unknown message 0x%x from HAL", msg_type);

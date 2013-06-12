@@ -36,6 +36,8 @@ static gboolean gst_droid_cam_src_imgsrc_query (GstPad * pad, GstQuery * query);
 static void gst_droid_cam_src_imgsrc_loop (gpointer data);
 static gboolean gst_droid_cam_src_imgsrc_negotiate (GstDroidCamSrc * src);
 
+/* TODO: Check any potential events needed by camerabin2 (start capture, finish capture, ...) */
+
 GstPad *
 gst_img_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
 {
@@ -54,6 +56,7 @@ gst_img_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
   gst_pad_set_query_type_function (pad, gst_droid_cam_src_imgsrc_query_type);
   gst_pad_set_query_function (pad, gst_droid_cam_src_imgsrc_query);
 
+  /* TODO: install an event handler via gst_pad_set_event_function() to catch renegotiation. */
   return pad;
 }
 
@@ -202,7 +205,6 @@ gst_img_src_pad_renegotiate (GstPad * pad)
 static void
 gst_droid_cam_src_imgsrc_loop (gpointer data)
 {
-#if 0
   GstPad *pad = (GstPad *) data;
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
   GstBuffer *buffer;
@@ -212,7 +214,11 @@ gst_droid_cam_src_imgsrc_loop (gpointer data)
 
   g_mutex_lock (&src->img_lock);
 
-  if (src->img_task_running) {
+  if (src->image_renegotiate) {
+    /* TODO: handle renegotiation */
+  }
+
+  if (!src->img_task_running) {
     g_mutex_unlock (&src->img_lock);
 
     GST_DEBUG_OBJECT (src, "task not running");
@@ -225,10 +231,39 @@ gst_droid_cam_src_imgsrc_loop (gpointer data)
 
     goto push_buffer;
   }
-  // TODO:
 
-flushing:
-#endif
+  g_cond_wait (&src->img_cond, &src->img_lock);
+
+  if (!src->img_task_running) {
+    g_mutex_unlock (&src->img_lock);
+
+    GST_DEBUG_OBJECT (src, "task not running");
+    return;
+  }
+
+  buffer = g_queue_pop_head (src->img_queue);
+  g_mutex_unlock (&src->img_lock);
+
+push_buffer:
+  if (!gst_pad_push_event (src->imgsrc, gst_event_new_new_segment (FALSE, 1.0,
+              GST_FORMAT_TIME, 0, -1, 0))) {
+    GST_WARNING_OBJECT (src, "failed to push new segment");
+  }
+
+  ret = gst_pad_push (src->imgsrc, buffer);
+
+  if (!gst_pad_push_event (src->imgsrc, gst_event_new_eos ())) {
+    GST_WARNING_OBJECT (src, "failed to push EOS");
+  }
+
+  if (ret == GST_FLOW_UNEXPECTED) {
+    /* Nothing */
+  } else if (ret == GST_FLOW_NOT_LINKED || ret <= GST_FLOW_UNEXPECTED) {
+    GST_ELEMENT_ERROR (src, STREAM, FAILED,
+        ("Internal data flow error."),
+        ("streaming task paused, reason %s (%d)", gst_flow_get_name (ret),
+            ret));
+  }
 }
 
 static gboolean

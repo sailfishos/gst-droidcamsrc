@@ -52,6 +52,7 @@ gst_vf_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
   gst_pad_set_query_function (pad, gst_droid_cam_src_vfsrc_query);
   gst_pad_set_fixatecaps_function (pad, gst_droid_cam_src_vfsrc_fixatecaps);
 
+  /* TODO: Do we need an event handler via gst_pad_set_event_function() ? */
   return pad;
 }
 
@@ -362,8 +363,6 @@ pause:
     /* perform EOS */
     gst_pad_push_event (pad, gst_event_new_eos ());
   }
-
-  return;
 }
 
 static gboolean

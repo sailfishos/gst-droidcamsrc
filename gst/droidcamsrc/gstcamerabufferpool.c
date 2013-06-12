@@ -408,7 +408,6 @@ gst_camera_buffer_pool_set_buffer_metadata_unlocked (GstCameraBufferPool * pool,
     clock = GST_ELEMENT_CLOCK (pool->src);
 
     if (clock) {
-      /* We have a clock, get base time and ref clock */
       timestamp = gst_clock_get_time (clock) - pool->src->base_time;
     } else {
       timestamp = GST_CLOCK_TIME_NONE;
