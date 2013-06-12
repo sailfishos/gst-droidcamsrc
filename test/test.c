@@ -67,8 +67,6 @@ bus_call (GstBus * bus, GstMessage * msg, gpointer data)
       GError *error;
 
       gst_message_parse_error (msg, &error, &debug);
-      g_free (debug);
-
       g_printerr ("Error: %s\n", error->message);
       g_error_free (error);
 
@@ -86,7 +84,6 @@ bus_call (GstBus * bus, GstMessage * msg, gpointer data)
       GError *error;
 
       gst_message_parse_warning (msg, &error, &debug);
-      g_free (debug);
 
       g_printerr ("Warning: %s\n", error->message);
       g_error_free (error);
