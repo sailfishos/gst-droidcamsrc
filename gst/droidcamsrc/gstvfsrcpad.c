@@ -95,6 +95,8 @@ gst_droid_cam_src_vfsrc_activatepush (GstPad * pad, gboolean active)
     GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
 
     GST_PAD_STREAM_UNLOCK (pad);
+
+    GST_DEBUG_OBJECT (src, "task started");
   } else {
     GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
     src->pool->flushing = TRUE;
@@ -290,6 +292,7 @@ gst_droid_cam_src_vfsrc_loop (gpointer data)
 
   GST_DEBUG_OBJECT (src, "empty app queue. waiting for buffer");
   g_cond_wait (&pool->app_cond, &pool->app_lock);
+  GST_DEBUG_OBJECT (src, "done waiting for buffer");
 
   if (pool->app_queue->length == 0) {
     /* pool is flushing. */
@@ -341,10 +344,13 @@ push_buffer:
 
   g_list_free (events);
 
+  GST_LOG_OBJECT (src, "pushing buffer %" GST_PTR_FORMAT, buff);
   ret = gst_pad_push (pad, GST_BUFFER (buff));
+
   if (ret != GST_FLOW_OK) {
     goto pause;
   }
+
   return;
 
 pause:

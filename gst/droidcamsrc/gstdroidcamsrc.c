@@ -620,6 +620,7 @@ gst_droid_cam_src_send_event (GstElement * element, GstEvent * event)
     gst_event_unref (event);
   }
 
+  GST_DEBUG_OBJECT (src, "send event returning %d", ret);
   return ret;
 }
 
@@ -630,6 +631,8 @@ gst_droid_cam_src_get_query_types (GstElement * element)
     GST_QUERY_LATENCY,
     0
   };
+
+  GST_DEBUG_OBJECT (element, "query types");
 
   return query_types;
 }
@@ -665,6 +668,8 @@ gst_droid_cam_src_query (GstElement * element, GstQuery * query)
       GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
       gst_query_set_latency (query, TRUE, src->pool->buffer_duration,
           src->pool->count * src->pool->buffer_duration);
+
+      GST_DEBUG_OBJECT (src, "latency query result %" GST_PTR_FORMAT, query);
 
       ret = TRUE;
       break;
