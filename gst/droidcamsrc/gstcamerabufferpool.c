@@ -35,7 +35,10 @@ G_DEFINE_TYPE (GstCameraBufferPool, gst_camera_buffer_pool,
 GST_DEBUG_CATEGORY_STATIC (droidcambufferpool_debug);
 #define GST_CAT_DEFAULT droidcambufferpool_debug
 
-#define MIN_UNDEQUEUED_BUFFER_COUNT 1
+#define MIN_UNDEQUEUED_BUFFER_COUNT 2
+
+/* Maximum amount of time we wait for the application/pipeline to finish rendering */
+#define MAX_DEQUEUE_TIMEOUT_MS 33
 
 #define container_of(ptr, type, member) ({ \
       const typeof( ((type *)0)->member ) *__mptr = (ptr); (type *)( (char *)__mptr - offsetof(type,member) );})
@@ -370,6 +373,29 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
   GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 
   g_mutex_lock (&pool->hal_lock);
+
+  /*
+   * TODO: We have an issue here.
+   * Qualcomm camera HAL queues the preview buffer and then tries to dequeue a buffer
+   * immediately. GStreamer sink always keeps a reference to the buffer so dequeue
+   * will always block waiting for the buffer to be returned from the sink which will never
+   * happen and we will simply deadlock.
+   * It seems that Qualcomm HAL is tolerant to the error we return here. To be tested
+   * with camera HAL from other vendors.
+   */
+  if (pool->hal_queue->length == 0) {
+    GST_DEBUG_OBJECT (pool, "waiting for buffer");
+    GTimeVal tv;
+    g_get_current_time (&tv);
+    g_time_val_add (&tv, MAX_DEQUEUE_TIMEOUT_MS * 1000);        /* in microseconds */
+    g_cond_timed_wait (&pool->hal_cond, &pool->hal_lock, &tv);
+
+#if 0
+    g_cond_wait (&pool->hal_cond, &pool->hal_lock);
+#endif
+
+    GST_DEBUG_OBJECT (pool, "done waiting for buffer");
+  }
 
   buff = g_queue_pop_head (pool->hal_queue);
 
