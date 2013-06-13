@@ -591,6 +591,7 @@ gst_droid_cam_src_send_event (GstElement * element, GstEvent * event)
       GST_DEBUG_OBJECT (src, "pushing event %p", event);
 
       event = NULL;
+      ret = TRUE;
 
       break;
 
@@ -615,6 +616,7 @@ gst_droid_cam_src_send_event (GstElement * element, GstEvent * event)
         event = NULL;
       }
 
+      ret = TRUE;
       break;
   }
 
