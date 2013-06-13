@@ -576,6 +576,10 @@ gst_droid_cam_src_send_event (GstElement * element, GstEvent * event)
       break;
 
     case GST_EVENT_EOS:
+      GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+      src->pool->flushing = TRUE;
+      GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
       gst_camera_buffer_pool_unlock_app_queue (src->pool);
 
       GST_PAD_STREAM_LOCK (src->vfsrc);
