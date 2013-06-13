@@ -374,6 +374,8 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
 
   g_mutex_lock (&pool->hal_lock);
 
+  GST_LOG_OBJECT (pool, "hal queue size: %i", pool->hal_queue->length);
+
   /*
    * TODO: We have an issue here.
    * Qualcomm camera HAL queues the preview buffer and then tries to dequeue a buffer
@@ -491,6 +493,8 @@ gst_camera_buffer_pool_enqueue_buffer (struct preview_stream_ops *w,
 
     g_cond_signal (&pool->hal_cond);
 
+    GST_LOG_OBJECT (pool, "hal queue size: %i", pool->hal_queue->length);
+
     g_mutex_unlock (&pool->hal_lock);
   } else {
     gst_camera_buffer_pool_set_buffer_metadata (pool, buff);
@@ -523,6 +527,8 @@ gst_camera_buffer_pool_cancel_buffer (struct preview_stream_ops *w,
   g_queue_push_tail (pool->hal_queue, buff);
 
   g_cond_signal (&pool->hal_cond);
+
+  GST_LOG_OBJECT (pool, "hal queue size: %i", pool->hal_queue->length);
 
   g_mutex_unlock (&pool->hal_lock);
 
