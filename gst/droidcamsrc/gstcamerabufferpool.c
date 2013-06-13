@@ -90,12 +90,9 @@ static gboolean
 gst_camera_buffer_pool_resurrect_buffer (void *data, GstNativeBuffer * buffer)
 {
   GstCameraBufferPool *pool = (GstCameraBufferPool *) data;
-
-  GST_CAMERA_BUFFER_POOL_LOCK (pool);
+  GST_DEBUG_OBJECT (pool, "resurrect buffer");
 
   gst_buffer_ref (GST_BUFFER (buffer));
-
-  GST_DEBUG_OBJECT (pool, "resurrect buffer");
 
   g_mutex_lock (&pool->hal_lock);
 
@@ -105,9 +102,9 @@ gst_camera_buffer_pool_resurrect_buffer (void *data, GstNativeBuffer * buffer)
 
   g_mutex_unlock (&pool->hal_lock);
 
-  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
-
   /* TODO: If we return FALSE then we need to unref the pool. */
+
+  GST_DEBUG_OBJECT (pool, "resurrected buffer");
 
   return TRUE;
 }
