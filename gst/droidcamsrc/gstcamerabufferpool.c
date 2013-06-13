@@ -488,13 +488,17 @@ gst_camera_buffer_pool_cancel_buffer (struct preview_stream_ops *w,
     buffer_handle_t * buffer)
 {
   GstCameraBufferPool *pool = gst_camera_buffer_pool_get (w);
+  GstNativeBuffer *buff = gst_camera_buffer_pool_get_buffer (buffer);
 
-  GST_CAMERA_BUFFER_POOL_LOCK (pool);
+  GST_DEBUG_OBJECT (pool, "cancel buffer: %p", buff);
 
-  /* TODO: What should we do here ? */
-  GST_DEBUG_OBJECT (pool, "cancel buffer");
+  g_mutex_lock (&pool->hal_lock);
 
-  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+  g_queue_push_tail (pool->hal_queue, buff);
+
+  g_cond_signal (&pool->hal_cond);
+
+  g_mutex_unlock (&pool->hal_lock);
 
   return 0;
 }
