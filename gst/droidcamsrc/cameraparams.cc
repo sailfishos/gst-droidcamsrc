@@ -28,12 +28,12 @@
 
 G_BEGIN_DECLS;
 
-typedef struct
+struct camera_params
 {
   std::map < std::string, std::vector < std::string > >items;
-} camera_params;
+};
 
-void *
+struct camera_params *
 camera_params_from_string (const char *str)
 {
   std::string s (str);
@@ -64,24 +64,21 @@ camera_params_from_string (const char *str)
             values));
   }
 
-  camera_params *params = new camera_params;
+  struct camera_params *params = new struct camera_params;
   params->items = items;
 
   return params;
 }
 
 void
-camera_params_free (void *params)
+camera_params_free (struct camera_params *params)
 {
-  camera_params *p = reinterpret_cast < camera_params * >(params);
-  delete p;
+  delete params;
 }
 
 void
-to_stream (void *p, std::stringstream & stream, char sep)
+to_stream (struct camera_params *params, std::stringstream & stream, char sep)
 {
-  camera_params *params = reinterpret_cast < camera_params * >(p);
-
   std::map < std::string, std::vector < std::string > >::iterator end =
       params->items.end ();
   --end;
@@ -106,7 +103,7 @@ to_stream (void *p, std::stringstream & stream, char sep)
 }
 
 char *
-camera_params_to_string (void *params)
+camera_params_to_string (struct camera_params *params)
 {
   std::stringstream s;
 
@@ -116,7 +113,7 @@ camera_params_to_string (void *params)
 }
 
 void
-camera_params_dump (void *params)
+camera_params_dump (struct camera_params *params)
 {
   std::stringstream s;
 
@@ -126,10 +123,9 @@ camera_params_dump (void *params)
 }
 
 void
-camera_params_set (void *p, const char *key, const char *val)
+camera_params_set (struct camera_params *params, const char *key,
+    const char *val)
 {
-  camera_params *params = reinterpret_cast < camera_params * >(p);
-
   std::vector < std::string > values;
 
   values.push_back (val);
@@ -145,10 +141,8 @@ camera_params_set (void *p, const char *key, const char *val)
 }
 
 GstCaps *
-camera_params_get_viewfinder_caps (void *p)
+camera_params_get_viewfinder_caps (struct camera_params *params)
 {
-  camera_params *params = reinterpret_cast < camera_params * >(p);
-
   std::map < std::string, std::vector < std::string > >::iterator sizes =
       params->items.find ("preview-size-values");
 
@@ -208,10 +202,8 @@ camera_params_get_viewfinder_caps (void *p)
 }
 
 GstCaps *
-camera_params_get_capture_caps (void *p)
+camera_params_get_capture_caps (struct camera_params * params)
 {
-  camera_params *params = reinterpret_cast < camera_params * >(p);
-
   std::map < std::string, std::vector < std::string > >::iterator sizes =
       params->items.find ("picture-size-values");
 
@@ -242,7 +234,6 @@ camera_params_get_capture_caps (void *p)
     if (!width || !height) {
       continue;
     }
-
     // TODO: hardcoded structure name
     // TODO: what to set framerate to ?
     GstStructure *s = gst_structure_new ("image/jpeg",
@@ -260,29 +251,31 @@ camera_params_get_capture_caps (void *p)
 }
 
 void
-camera_params_set_viewfinder_size (void *p, int width, int height)
+camera_params_set_viewfinder_size (struct camera_params *params, int width,
+    int height)
 {
   std::stringstream stream;
   stream << width << "x" << height;
 
-  camera_params_set (p, "preview-size", stream.str ().c_str ());
+  camera_params_set (params, "preview-size", stream.str ().c_str ());
 }
 
 void
-camera_params_set_capture_size (void *p, int width, int height)
+camera_params_set_capture_size (struct camera_params *params, int width,
+    int height)
 {
   std::stringstream stream;
   stream << width << "x" << height;
 
-  camera_params_set (p, "picture-size", stream.str ().c_str ());
+  camera_params_set (params, "picture-size", stream.str ().c_str ());
 }
 
 void
-camera_params_set_viewfinder_fps (void *p, int fps)
+camera_params_set_viewfinder_fps (struct camera_params *params, int fps)
 {
   std::stringstream stream;
   stream << fps;
-  camera_params_set (p, "preview-frame-rate", stream.str ().c_str ());
+  camera_params_set (params, "preview-frame-rate", stream.str ().c_str ());
 }
 
 G_END_DECLS;

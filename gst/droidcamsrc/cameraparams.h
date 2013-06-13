@@ -25,16 +25,18 @@
 
 G_BEGIN_DECLS
 
-void *camera_params_from_string(const char *str);
-void camera_params_free(void *params);
-char *camera_params_to_string(void *params);
-void camera_params_dump(void *params);
-void camera_params_set(void *p, const char *key, const char *val);
-GstCaps *camera_params_get_viewfinder_caps (void *p);
-GstCaps *camera_params_get_capture_caps (void *p);
-void camera_params_set_viewfinder_size (void *p, int width, int height);
-void camera_params_set_capture_size (void *p, int width, int height);
-void camera_params_set_viewfinder_fps (void *p, int fps);
+struct camera_params;
+
+struct camera_params *camera_params_from_string(const char *str);
+void camera_params_free(struct camera_params *params);
+char *camera_params_to_string(struct camera_params *params);
+void camera_params_dump(struct camera_params *params);
+void camera_params_set(struct camera_params *params, const char *key, const char *val);
+GstCaps *camera_params_get_viewfinder_caps (struct camera_params *params);
+GstCaps *camera_params_get_capture_caps (struct camera_params *params);
+void camera_params_set_viewfinder_size (struct camera_params *params, int width, int height);
+void camera_params_set_capture_size (struct camera_params *params, int width, int height);
+void camera_params_set_viewfinder_fps (struct camera_params *params, int fps);
 
 G_END_DECLS
 

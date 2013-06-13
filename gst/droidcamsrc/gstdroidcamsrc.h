@@ -58,7 +58,7 @@ struct _GstDroidCamSrc {
   struct hw_device_t *cam_dev;
   camera_device_t *dev;
 
-  void *camera_params;
+  struct camera_params *camera_params;
 
   GstCameraBufferPool *pool;
 
