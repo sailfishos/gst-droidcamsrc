@@ -375,19 +375,14 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
 
   g_mutex_unlock (&pool->hal_lock);
 
-  GST_CAMERA_BUFFER_POOL_LOCK (pool);
-
   if (!buff) {
     /* TODO: Not really sure what to do here */
-    GST_DEBUG_OBJECT (pool, "no buffer");
-    GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+    GST_WARNING_OBJECT (pool, "no buffer");
     return -EINVAL;
   }
 
   *stride = buff->stride;
   *buffer = &buff->handle;
-
-  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 
   GST_DEBUG_OBJECT (pool, "dequeueing buffer %p", buff);
 
@@ -395,21 +390,26 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
 }
 
 static void
-gst_camera_buffer_pool_set_buffer_metadata_unlocked (GstCameraBufferPool * pool,
+gst_camera_buffer_pool_set_buffer_metadata (GstCameraBufferPool * pool,
     GstNativeBuffer * buffer)
 {
   GstBuffer *buff = GST_BUFFER (buffer);
 
   GST_DEBUG_OBJECT (pool, "set buffer metadata");
 
+  GST_CAMERA_BUFFER_POOL_LOCK (pool);
+
   GST_BUFFER_OFFSET (buff) = pool->frames++;
   GST_BUFFER_OFFSET_END (buff) = pool->frames;
-
 
   /* TODO: We don't know how the timestamp format really is.
      This assertion is there until we get Android HAL which sends timestamp
      and we know what to do with it. */
+  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+
   g_return_if_fail (pool->last_timestamp == 0);
+
+  GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
   if (!pool->last_timestamp) {
     GstClock *clock;
@@ -437,6 +437,8 @@ gst_camera_buffer_pool_set_buffer_metadata_unlocked (GstCameraBufferPool * pool,
   }
 
   GST_BUFFER_DURATION (buff) = pool->buffer_duration;
+
+  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 }
 
 static int
@@ -445,12 +447,15 @@ gst_camera_buffer_pool_enqueue_buffer (struct preview_stream_ops *w,
 {
   GstCameraBufferPool *pool = gst_camera_buffer_pool_get (w);
   GstNativeBuffer *buff = gst_camera_buffer_pool_get_buffer (buffer);
+  gboolean flushing;
 
   GST_DEBUG_OBJECT (pool, "enqueue buffer %p", buff);
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
+  flushing = pool->flushing;
+  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 
-  if (pool->flushing) {
+  if (flushing) {
     GST_DEBUG_OBJECT (pool,
         "pool is flushing. Pushing buffer %p back to camera HAL", buff);
 
@@ -462,7 +467,7 @@ gst_camera_buffer_pool_enqueue_buffer (struct preview_stream_ops *w,
 
     g_mutex_unlock (&pool->hal_lock);
   } else {
-    gst_camera_buffer_pool_set_buffer_metadata_unlocked (pool, buff);
+    gst_camera_buffer_pool_set_buffer_metadata (pool, buff);
 
     GST_DEBUG_OBJECT (pool, "Pushing buffer %p to application queue", buff);
 
@@ -474,8 +479,6 @@ gst_camera_buffer_pool_enqueue_buffer (struct preview_stream_ops *w,
 
     g_mutex_unlock (&pool->app_lock);
   }
-
-  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 
   return 0;
 }
