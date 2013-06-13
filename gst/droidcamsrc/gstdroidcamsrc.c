@@ -884,10 +884,11 @@ invoke_finish:
   /*
    * TODO: If we ever discover that we cannot invoke gst_droid_cam_src_finish_capture()
    * from the data callback then we can use that.
-   * g_timeout_add_full (G_PRIORITY_HIGH, 0, (GSourceFunc)gst_droid_cam_src_finish_capture,
-   * src, NULL);
    */
-
+#if 0
+  g_timeout_add_full (G_PRIORITY_HIGH, 0,
+      (GSourceFunc) gst_droid_cam_src_finish_capture, src, NULL);
+#endif
   gst_droid_cam_src_finish_capture (src);
 }
 
