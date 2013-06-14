@@ -26,6 +26,10 @@
 #include <gst/gstnativebuffer.h>
 
 static void gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool);
+static gboolean gst_camera_buffer_pool_resurrect_buffer (void *data,
+    GstNativeBuffer * buffer);
+static gboolean gst_camera_buffer_pool_free_buffer (void *data,
+    GstNativeBuffer * buffer);
 
 static GstCameraBufferPoolClass *parent_class;
 
@@ -90,6 +94,15 @@ gst_camera_buffer_pool_unlock_app_queue (GstCameraBufferPool * pool)
 }
 
 static gboolean
+gst_camera_buffer_pool_free_buffer (void *data, GstNativeBuffer * buffer)
+{
+  /* Don't touch data. Likely to be garbage. */
+  gst_gralloc_free (buffer->gralloc, buffer->handle);
+
+  return FALSE;                 /* free buffer finally */
+}
+
+static gboolean
 gst_camera_buffer_pool_resurrect_buffer (void *data, GstNativeBuffer * buffer)
 {
   GstCameraBufferPool *pool = (GstCameraBufferPool *) data;
@@ -104,8 +117,6 @@ gst_camera_buffer_pool_resurrect_buffer (void *data, GstNativeBuffer * buffer)
   g_cond_signal (&pool->hal_cond);
 
   g_mutex_unlock (&pool->hal_lock);
-
-  /* TODO: If we return FALSE then we need to unref the pool. */
 
   GST_DEBUG_OBJECT (pool, "resurrected buffer");
 
@@ -616,9 +627,8 @@ gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
     GstNativeBuffer *buffer = g_ptr_array_index (pool->buffers, 0);
     GST_DEBUG_OBJECT (pool, "free buffer %p", buffer);
 
-    buffer->finalize_callback = NULL;
-    /* TODO: It might be that we are freeing a buffer being held by someone :| */
-    gst_gralloc_free (pool->gralloc, buffer->handle);
+    /* We will not free the buffer for now. It will be freed whenever its reference count drops to 0 */
+    buffer->finalize_callback = gst_camera_buffer_pool_free_buffer;
 
     g_ptr_array_remove (pool->buffers, buffer);
 
