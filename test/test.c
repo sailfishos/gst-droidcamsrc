@@ -150,6 +150,7 @@ test_pipeline_new (int argc, char *argv[])
     goto error;
   }
 
+  g_object_set (pipeline->vf_q, "leaky", 1, "max-size-buffers", 1, NULL);
   pipeline->fs = gst_element_factory_make ("multifilesink", NULL);
   if (!pipeline->fs) {
     g_printerr ("Failed to create multifilesink element");
@@ -171,6 +172,8 @@ test_pipeline_new (int argc, char *argv[])
     g_printerr ("Failed to create image capture queue");
     goto error;
   }
+
+  g_object_set (pipeline->fs_q, "leaky", 1, "max-size-buffers", 1, NULL);
 
   pipeline->pipeline = gst_pipeline_new (NULL);
 
