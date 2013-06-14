@@ -806,10 +806,11 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
   gst_camera_buffer_pool_unlock_app_queue (src->pool);
   /* task has been paused by now */
 
-  GST_PAD_STREAM_LOCK (src->vfsrc);
   if (!gst_pad_push_event (src->vfsrc, gst_event_new_flush_start ())) {
     GST_WARNING_OBJECT (src, "failed to push flush start event");
   }
+
+  GST_PAD_STREAM_LOCK (src->vfsrc);
 
   if (!gst_pad_push_event (src->vfsrc, gst_event_new_flush_stop ())) {
     GST_WARNING_OBJECT (src, "failed to push flush stop event");
