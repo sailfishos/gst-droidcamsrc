@@ -635,6 +635,7 @@ gst_droid_cam_src_get_query_types (GstElement * element)
 {
   static const GstQueryType query_types[] = {
     GST_QUERY_LATENCY,
+    GST_QUERY_FORMATS,
     0
   };
 
@@ -677,6 +678,11 @@ gst_droid_cam_src_query (GstElement * element, GstQuery * query)
 
       GST_DEBUG_OBJECT (src, "latency query result %" GST_PTR_FORMAT, query);
 
+      ret = TRUE;
+      break;
+
+    case GST_QUERY_FORMATS:
+      gst_query_set_formats (query, 1, GST_FORMAT_TIME, NULL);
       ret = TRUE;
       break;
 
