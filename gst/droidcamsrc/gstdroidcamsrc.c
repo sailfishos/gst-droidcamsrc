@@ -779,7 +779,7 @@ gst_droid_cam_src_stop_capture (GstDroidCamSrc * src)
   }
 }
 
-/* */
+/* with capturing_lock */
 static gboolean
 gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
 {
@@ -797,6 +797,34 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
 
     src->image_renegotiate = FALSE;
   }
+
+  /* unlock our pad */
+  GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+  src->pool->flushing = TRUE;
+  GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+  gst_camera_buffer_pool_unlock_app_queue (src->pool);
+  /* task has been paused by now */
+
+  GST_PAD_STREAM_LOCK (src->vfsrc);
+  if (!gst_pad_push_event (src->vfsrc, gst_event_new_flush_start ())) {
+    GST_WARNING_OBJECT (src, "failed to push flush start event");
+  }
+
+  if (!gst_pad_push_event (src->vfsrc, gst_event_new_flush_stop ())) {
+    GST_WARNING_OBJECT (src, "failed to push flush stop event");
+  }
+
+  GST_PAD_STREAM_UNLOCK (src->vfsrc);
+
+  /* We will have to send a new segment event */
+  src->send_new_segment = TRUE;
+
+  /* clear any pending events */
+  GST_OBJECT_LOCK (src);
+  g_list_free_full (src->events, (GDestroyNotify) gst_event_unref);
+  src->events = NULL;
+  GST_OBJECT_UNLOCK (src);
 
   /* start actual capturing */
   err = src->dev->ops->take_picture (src->dev);
@@ -896,24 +924,38 @@ static gboolean
 gst_droid_cam_src_finish_capture (GstDroidCamSrc * src)
 {
   int err;
+  gboolean started;
 
   GST_DEBUG_OBJECT (src, "finish capture");
-
-  g_mutex_lock (&src->capturing_mutex);
-
-  src->capturing = FALSE;
-  g_object_notify (G_OBJECT (src), "ready-for-capture");
-
-  g_mutex_unlock (&src->capturing_mutex);
 
   err = src->dev->ops->start_preview (src->dev);
 
   if (err != 0) {
     GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("Could not start camera: %d", err),
         (NULL));
+    goto out;
   }
 
   GST_DEBUG_OBJECT (src, "finish capture done");
+
+  /* TODO: this is a hack */
+  started = gst_pad_start_task (src->vfsrc, src->vfsrc->task->func, src->vfsrc);
+
+  if (!started) {
+    GST_ERROR_OBJECT (src, "Failed to start task");
+  } else {
+    GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+    src->pool->flushing = FALSE;
+    GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+  }
+
+out:
+  g_mutex_lock (&src->capturing_mutex);
+
+  src->capturing = FALSE;
+  g_object_notify (G_OBJECT (src), "ready-for-capture");
+
+  g_mutex_unlock (&src->capturing_mutex);
 
   return FALSE;                 /* Don't call us again */
 }

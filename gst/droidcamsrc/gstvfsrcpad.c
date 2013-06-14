@@ -318,10 +318,13 @@ push_buffer:
   /* push buffer */
   gst_camera_buffer_pool_unref (src->pool);
   if (G_UNLIKELY (src->send_new_segment)) {
+    GST_WARNING_OBJECT (src, "sending new segment event");
     src->send_new_segment = FALSE;
+    GstClockTime timestamp = GST_BUFFER_TIMESTAMP (buff);
+
     // TODO: is this correct?
     if (!gst_pad_push_event (src->vfsrc, gst_event_new_new_segment (FALSE, 1.0,
-                GST_FORMAT_TIME, 0, -1, 0))) {
+                GST_FORMAT_TIME, timestamp, -1, 0))) {
       GST_WARNING_OBJECT (src, "failed to push new segment");
     }
   }
