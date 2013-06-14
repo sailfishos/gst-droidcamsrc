@@ -43,10 +43,11 @@ G_BEGIN_DECLS
 
 #define DEFAULT_VF_WIDTH         640
 #define DEFAULT_VF_HEIGHT        480
-#define DEFAULT_VF_FPS           30
 
 #define DEFAULT_IMG_WIDTH        640
 #define DEFAULT_IMG_HEIGHT       480
+
+#define DEFAULT_FPS           30
 
 typedef struct _GstDroidCamSrc GstDroidCamSrc;
 typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;

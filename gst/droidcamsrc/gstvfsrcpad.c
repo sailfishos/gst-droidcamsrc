@@ -252,8 +252,7 @@ gst_droid_cam_src_vfsrc_fixatecaps (GstPad * pad, GstCaps * caps)
 
   gst_structure_fixate_field_nearest_int (s, "width", DEFAULT_VF_WIDTH);
   gst_structure_fixate_field_nearest_int (s, "height", DEFAULT_VF_HEIGHT);
-  gst_structure_fixate_field_nearest_fraction (s, "framerate", DEFAULT_VF_FPS,
-      1);
+  gst_structure_fixate_field_nearest_fraction (s, "framerate", DEFAULT_FPS, 1);
 
   GST_DEBUG_OBJECT (src, "caps now is %" GST_PTR_FORMAT, caps);
 }
@@ -414,7 +413,7 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
     caps = gst_caps_new_simple (GST_NATIVE_BUFFER_NAME,
         "width", G_TYPE_INT, DEFAULT_VF_WIDTH,
         "height", G_TYPE_INT, DEFAULT_VF_HEIGHT,
-        "framerate", GST_TYPE_FRACTION, DEFAULT_VF_FPS, 1, NULL);
+        "framerate", GST_TYPE_FRACTION, DEFAULT_FPS, 1, NULL);
 
     GST_DEBUG_OBJECT (src, "using default caps %" GST_PTR_FORMAT, caps);
 
