@@ -602,7 +602,10 @@ gst_droid_cam_src_send_event (GstElement * element, GstEvent * event)
     case GST_EVENT_CUSTOM_DOWNSTREAM_OOB:
     case GST_EVENT_CUSTOM_BOTH:
     case GST_EVENT_CUSTOM_BOTH_OOB:
-      if (GST_EVENT_IS_SERIALIZED (event)) {
+      if (GST_EVENT_IS_UPSTREAM (event) && !GST_EVENT_IS_DOWNSTREAM (event)) {
+        /* Drop upstream only events */
+        break;
+      } else if (GST_EVENT_IS_SERIALIZED (event)) {
         GST_DEBUG_OBJECT (src, "queueing event %p", event);
 
         GST_OBJECT_LOCK (src);
