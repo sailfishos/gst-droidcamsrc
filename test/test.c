@@ -45,9 +45,7 @@ bus_call (GstBus * bus, GstMessage * msg, gpointer data)
 
       if (gst_structure_has_name (structure, "GstMultiFileSink")) {
         filename = gst_structure_get_string (structure, "filename");
-        g_print
-            ("Got file save message from multifilesink, image %s has been saved",
-            filename);
+        g_print ("Image %s has been saved\n", filename);
 
         gst_element_set_state (pipeline->fs, GST_STATE_NULL);
         gst_element_set_locked_state (pipeline->fs, TRUE);
@@ -57,7 +55,7 @@ bus_call (GstBus * bus, GstMessage * msg, gpointer data)
     }
 
     case GST_MESSAGE_EOS:
-      g_print ("End of stream\n");
+      g_printerr ("End of stream\n");
       pipeline->ret = 0;
       g_main_loop_quit (pipeline->loop);
       break;
