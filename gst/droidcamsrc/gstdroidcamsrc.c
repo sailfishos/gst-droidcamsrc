@@ -864,6 +864,8 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
 
   GST_PAD_STREAM_UNLOCK (src->vfsrc);
 
+  gst_pad_stop_task (src->vfsrc);
+
   /* We will have to send a new segment event */
   src->send_new_segment = TRUE;
 
