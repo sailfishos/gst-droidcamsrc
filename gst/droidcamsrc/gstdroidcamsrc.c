@@ -90,6 +90,10 @@ static gboolean gst_droid_cam_src_query (GstElement * element,
 static gboolean gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_set_camera_params (GstDroidCamSrc * src);
+static gboolean gst_droid_cam_src_open_segment (GstDroidCamSrc * src,
+    GstPad * pad);
+static void gst_droid_cam_src_update_segment (GstDroidCamSrc * src,
+    GstBuffer * buffer);
 static void gst_droid_cam_src_tear_down_pipeline (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_probe_camera (GstDroidCamSrc * src);
 
@@ -161,6 +165,8 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
   GstDroidCamSrcClass *droidcamsrc_class = (GstDroidCamSrcClass *) klass;
 
   droidcamsrc_class->set_camera_params = gst_droid_cam_src_set_camera_params;
+  droidcamsrc_class->open_segment = gst_droid_cam_src_open_segment;
+  droidcamsrc_class->update_segment = gst_droid_cam_src_update_segment;
 
   gobject_class->finalize = gst_droid_cam_src_finalize;
   gobject_class->get_property = gst_droid_cam_src_get_property;
@@ -220,6 +226,8 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->pool = NULL;
   src->camera_params = NULL;
   src->events = NULL;
+
+  gst_segment_init (&src->segment, GST_FORMAT_TIME);
 
   src->capturing = FALSE;
   g_mutex_init (&src->capturing_mutex);
@@ -472,6 +480,34 @@ gst_droid_cam_src_set_camera_params (GstDroidCamSrc * src)
   return ret;
 }
 
+static gboolean
+gst_droid_cam_src_open_segment (GstDroidCamSrc * src, GstPad * pad)
+{
+  GstEvent *event;
+
+  GST_DEBUG_OBJECT (src, "open segment");
+
+  event = gst_event_new_new_segment_full (FALSE,
+      src->segment.rate, src->segment.applied_rate, src->segment.format,
+      src->segment.start, src->segment.duration, src->segment.time);
+
+  return gst_pad_push_event (pad, event);
+}
+
+static void
+gst_droid_cam_src_update_segment (GstDroidCamSrc * src, GstBuffer * buffer)
+{
+  gint64 position;
+
+  GST_DEBUG_OBJECT (src, "update segment");
+
+  position = GST_BUFFER_TIMESTAMP (buffer) + GST_BUFFER_DURATION (buffer);
+
+  GST_OBJECT_LOCK (src);
+  gst_segment_set_last_stop (&src->segment, src->segment.format, position);
+  GST_OBJECT_UNLOCK (src);
+}
+
 static GstStateChangeReturn
 gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
 {
@@ -533,6 +569,7 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
       /* TODO: is this the right thing to do? */
       /* TODO: do we need locking here? */
       src->capturing = FALSE;
+      gst_segment_init (&src->segment, GST_FORMAT_TIME);
       break;
 
     case GST_STATE_CHANGE_READY_TO_NULL:

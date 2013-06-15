@@ -206,6 +206,7 @@ gst_droid_cam_src_imgsrc_loop (gpointer data)
 {
   GstPad *pad = (GstPad *) data;
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
+  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
   GstBuffer *buffer;
   GstFlowReturn ret;
 
@@ -244,10 +245,11 @@ gst_droid_cam_src_imgsrc_loop (gpointer data)
   g_mutex_unlock (&src->img_lock);
 
 push_buffer:
-  if (!gst_pad_push_event (src->imgsrc, gst_event_new_new_segment (FALSE, 1.0,
-              GST_FORMAT_TIME, 0, -1, 0))) {
+  if (!klass->open_segment (src, src->imgsrc)) {
     GST_WARNING_OBJECT (src, "failed to push new segment");
   }
+
+  klass->update_segment (src, buffer);
 
   ret = gst_pad_push (src->imgsrc, buffer);
 

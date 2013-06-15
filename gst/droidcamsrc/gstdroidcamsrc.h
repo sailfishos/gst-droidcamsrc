@@ -71,6 +71,8 @@ struct _GstDroidCamSrc {
 
   GList *events;
 
+  GstSegment segment;
+
   GstPad *vfsrc;
   GstPad *imgsrc;
 
@@ -91,6 +93,9 @@ struct _GstDroidCamSrcClass {
   GstBinClass parent_class;
 
   gboolean (* set_camera_params) (GstDroidCamSrc *src);
+
+  gboolean (* open_segment) (GstDroidCamSrc *src, GstPad * pad);
+  void (* update_segment) (GstDroidCamSrc *src, GstBuffer * buffer);
 };
 
 GType gst_droid_cam_src_get_type (void);
