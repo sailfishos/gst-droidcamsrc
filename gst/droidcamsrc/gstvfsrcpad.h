@@ -25,6 +25,7 @@
 G_BEGIN_DECLS
 
 GstPad *gst_vf_src_pad_new (GstStaticPadTemplate *pad_template, const char * name);
+gboolean gst_vf_src_pad_start_task (GstPad * pad);
 
 G_END_DECLS
 

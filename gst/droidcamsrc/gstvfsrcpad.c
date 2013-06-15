@@ -56,6 +56,12 @@ gst_vf_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
   return pad;
 }
 
+gboolean
+gst_vf_src_pad_start_task (GstPad * pad)
+{
+  return gst_pad_start_task (pad, gst_droid_cam_src_vfsrc_loop, pad);
+}
+
 static gboolean
 gst_droid_cam_src_vfsrc_activatepush (GstPad * pad, gboolean active)
 {
@@ -77,7 +83,7 @@ gst_droid_cam_src_vfsrc_activatepush (GstPad * pad, gboolean active)
     /* Then we start our task */
     GST_PAD_STREAM_LOCK (pad);
 
-    started = gst_pad_start_task (pad, gst_droid_cam_src_vfsrc_loop, pad);
+    started = gst_vf_src_pad_start_task (pad);
     if (!started) {
       GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
       src->pool->flushing = TRUE;

@@ -987,14 +987,16 @@ gst_droid_cam_src_finish_capture (GstDroidCamSrc * src)
 
   GST_DEBUG_OBJECT (src, "finish capture done");
 
-  /* TODO: this is a hack */
-  started = gst_pad_start_task (src->vfsrc, src->vfsrc->task->func, src->vfsrc);
+  GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+  src->pool->flushing = FALSE;
+  GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+  started = gst_vf_src_pad_start_task (src->vfsrc);
 
   if (!started) {
     GST_ERROR_OBJECT (src, "Failed to start task");
-  } else {
     GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
-    src->pool->flushing = FALSE;
+    src->pool->flushing = TRUE;
     GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
   }
 
