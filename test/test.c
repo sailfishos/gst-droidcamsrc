@@ -235,6 +235,11 @@ test_pipeline_free (TestPipeline * pipeline)
   gst_object_unref (pipeline->src);
   gst_object_unref (pipeline->vf_csp);
   gst_object_unref (pipeline->vf);
+  gst_object_unref (pipeline->vf_q);
+  gst_object_unref (pipeline->fs);
+  gst_object_unref (pipeline->fs_csp);
+  gst_object_unref (pipeline->fs_q);
+
   g_free (pipeline);
 }
 
