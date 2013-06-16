@@ -116,6 +116,9 @@ static void gst_droid_cam_src_handle_compressed_image (GstDroidCamSrc * src,
 
 static gboolean gst_droid_cam_src_finish_capture (GstDroidCamSrc * src);
 
+static void gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src,
+    gboolean apply);
+
 enum
 {
   PROP_0,
@@ -307,6 +310,7 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
 
     case PROP_MODE:
       src->mode = g_value_get_enum (value);
+      gst_droid_cam_src_set_recording_hint (src, TRUE);
       break;
 
     default:
@@ -341,12 +345,13 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
 
   params = src->dev->ops->get_parameters (src->dev);
   src->camera_params = camera_params_from_string (params);
-
   if (src->dev->ops->put_parameters) {
     src->dev->ops->put_parameters (src->dev, params);
   } else {
     free (params);
   }
+
+  gst_droid_cam_src_set_recording_hint (src, FALSE);
 
   if (!gst_droid_cam_src_set_callbacks (src)) {
     goto cleanup;
@@ -464,6 +469,8 @@ gst_droid_cam_src_set_camera_params (GstDroidCamSrc * src)
   int err;
   gchar *params;
   gboolean ret = TRUE;
+
+  // TODO: locking
 
   GST_DEBUG_OBJECT (src, "set params");
 
@@ -1027,5 +1034,32 @@ gst_droid_cam_src_data_callback (int32_t msg_type, const camera_memory_t * mem,
     default:
       GST_WARNING_OBJECT (src, "unknown message 0x%x from HAL", msg_type);
       break;
+  }
+}
+
+static void
+gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src, gboolean apply)
+{
+  GST_DEBUG_OBJECT (src, "set recording hint");
+
+  GST_OBJECT_LOCK (src);
+
+  switch (src->mode) {
+    case MODE_IMAGE:
+      camera_params_set (src->camera_params, "recording-hint", "false");
+      break;
+    case MODE_VIDEO:
+      camera_params_set (src->camera_params, "recording-hint", "true");
+      break;
+    default:
+      GST_OBJECT_UNLOCK (src);
+      GST_WARNING_OBJECT (src, "Unknown camera mode %d", src->mode);
+      return;
+  }
+
+  GST_OBJECT_UNLOCK (src);
+
+  if (apply) {
+    gst_droid_cam_src_set_camera_params (src);
   }
 }
