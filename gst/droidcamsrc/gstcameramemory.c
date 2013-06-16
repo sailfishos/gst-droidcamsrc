@@ -52,7 +52,7 @@ gst_camera_memory_get (int fd, size_t buf_size, unsigned int num_bufs,
   mem->mem.handle = mem;
   mem->mem.release = gst_camera_memory_release;
 
-  if (fd < 0) {
+  if (fd != -1) {
     res = gst_camera_memory_get_mmap (mem);
   } else {
     res = gst_camera_memory_get_malloc (mem);
@@ -72,6 +72,7 @@ gst_camera_memory_get_mmap (GstCameraMemory * mem)
   mem->mem.data =
       mmap (0, mem->mem.size, PROT_READ | PROT_WRITE, MAP_SHARED, mem->fd, 0);
   if (mem->mem.data == MAP_FAILED) {
+    perror ("mmap");
     return FALSE;
   }
 
@@ -83,6 +84,7 @@ gst_camera_memory_get_malloc (GstCameraMemory * mem)
 {
   mem->mem.data = g_slice_alloc (mem->mem.size);
   if (!mem->mem.data) {
+    perror ("malloc");
     return FALSE;
   }
 
