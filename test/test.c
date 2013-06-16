@@ -90,8 +90,6 @@ bus_call (GstBus * bus, GstMessage * msg, gpointer data)
         g_free (debug);
       }
 
-      pipeline->ret = 1;
-      g_main_loop_quit (pipeline->loop);
       break;
     }
 
