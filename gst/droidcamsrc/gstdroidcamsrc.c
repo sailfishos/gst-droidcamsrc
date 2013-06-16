@@ -873,8 +873,19 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
 
   gst_pad_stop_task (src->vfsrc);
 
+#if 0
+  /* TODO: We cannot send a new segment here.
+   * If we send a NEWSEGMENT event and then push the first buffer downstream.
+   * What happens is that the sink blocks waiting for clock synchronization.
+   * The real issue is the base_time of our element will be different
+   * than the base_time the sink element. This discrepancy remains until the sink receives
+   * the first buffer after the NEWSEGMENT, prerolls and gets to playing state.
+   * Then out base_time will be updated.
+   * This will stall the pipeline for a while until the update happens.
+   */
   /* We will have to send a new segment event */
   src->send_new_segment = TRUE;
+#endif
 
   /* clear any pending events */
   GST_OBJECT_LOCK (src);
