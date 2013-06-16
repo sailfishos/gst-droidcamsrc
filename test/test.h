@@ -39,6 +39,8 @@ typedef struct
 
   GstElement *pipeline;
 
+  gulong probe_id;
+
   int ret;
 } TestPipeline;
 

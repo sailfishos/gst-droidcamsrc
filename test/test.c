@@ -111,6 +111,10 @@ imgsrc_data_probe (GstPad * pad, GstMiniObject * obj, gpointer user_data)
 
   gst_element_set_state (pipeline->fs, GST_STATE_PLAYING);
 
+  gst_pad_remove_data_probe (pad, pipeline->probe_id);
+
+  pipeline->probe_id = -1;
+
   return TRUE;                  /* keep data. */
 }
 
@@ -209,7 +213,8 @@ test_pipeline_new (int argc, char *argv[])
   gst_object_unref (bus);
 
   pad = gst_element_get_static_pad (pipeline->src, "imgsrc");
-  gst_pad_add_data_probe (pad, G_CALLBACK (imgsrc_data_probe), pipeline);
+  pipeline->probe_id =
+      gst_pad_add_data_probe (pad, G_CALLBACK (imgsrc_data_probe), pipeline);
   gst_object_unref (pad);
 
   return pipeline;
