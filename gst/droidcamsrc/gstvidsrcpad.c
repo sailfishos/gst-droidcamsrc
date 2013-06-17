@@ -38,6 +38,9 @@ static gboolean gst_droid_cam_src_vidsrc_negotiate (GstDroidCamSrc * src);
 
 /* TODO: Check any potential events needed by camerabin2 (start capture, finish capture, ...) */
 
+/* TODO: We have a mess of caps. It should viewfinder and video capture caps should be the same
+ * but we don't try to enforce that yet */
+
 GstPad *
 gst_vid_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
 {
@@ -208,7 +211,9 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
 {
   GstPad *pad = (GstPad *) data;
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
+#if 0
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+#endif
   GstBuffer *buffer;
   GstFlowReturn ret;
 
@@ -247,19 +252,18 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   g_mutex_unlock (&src->video_lock);
 
 push_buffer:
+#if 0
   /* TODO: hmmm */
   if (!klass->open_segment (src, src->vidsrc)) {
     GST_WARNING_OBJECT (src, "failed to push new segment");
   }
+#endif
 
   ret = gst_pad_push (src->vidsrc, buffer);
 
-  if (!gst_pad_push_event (src->vidsrc, gst_event_new_eos ())) {
-    GST_WARNING_OBJECT (src, "failed to push EOS");
-  }
-
   if (ret == GST_FLOW_UNEXPECTED) {
     /* Nothing */
+    GST_WARNING_OBJECT (src, "GST_FLOW_UNEXPECTED while pushing buffer");
   } else if (ret == GST_FLOW_NOT_LINKED || ret <= GST_FLOW_UNEXPECTED) {
     GST_ELEMENT_ERROR (src, STREAM, FAILED,
         ("Internal data flow error."),

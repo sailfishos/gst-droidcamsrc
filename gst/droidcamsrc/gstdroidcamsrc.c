@@ -545,7 +545,7 @@ gst_droid_cam_src_update_segment (GstDroidCamSrc * src, GstBuffer * buffer)
 {
   gint64 position;
 
-  GST_DEBUG_OBJECT (src, "update segment");
+  GST_LOG_OBJECT (src, "update segment");
 
   position = GST_BUFFER_TIMESTAMP (buffer) + GST_BUFFER_DURATION (buffer);
 
@@ -1024,7 +1024,7 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
   if (!gst_droid_cam_src_flush_buffers (src)) {
     return FALSE;
   }
-#if 0
+
   err = src->dev->ops->store_meta_data_in_buffers (src->dev, 1);
   if (err != 0) {
     GST_WARNING_OBJECT (src,
@@ -1033,10 +1033,9 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
     ret = FALSE;
     goto out;
   }
-#endif
 
   g_mutex_lock (&src->pushed_video_frames_lock);
-  src->pushed_video_frames = 9;
+  src->pushed_video_frames = 0;
   g_mutex_unlock (&src->pushed_video_frames_lock);
   src->num_video_frames = 0;
 
@@ -1082,10 +1081,31 @@ gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
 {
   GST_DEBUG_OBJECT (src, "stop video capture");
 
-  /* First we send EOS */
-  /* Then we wait for all buffers to be returned */
-
+  /* Stop video recording */
   src->dev->ops->stop_recording (src->dev);
+
+#if 0
+  /* Wait for the queue to be empty */
+  g_mutex_lock (&src->pushed_video_frames_lock);
+
+  while (src->pushed_video_frames > 0) {
+    g_cond_wait (&src->pushed_video_frames_cond,
+        &src->pushed_video_frames_lock);
+  }
+
+  g_mutex_unlock (&src->pushed_video_frames_lock);
+
+  g_assert (src->video_queue->length == 0);
+#endif
+
+  /* Now we send EOS */
+  GST_DEBUG_OBJECT (src, "pushing EOS to video branch");
+
+  if (!gst_pad_push_event (src->vidsrc, gst_event_new_eos ())) {
+    GST_WARNING_OBJECT (src, "Failed to push EOS to video branch");
+  }
+
+  GST_LOG_OBJECT (src, "pushed %d video frames", src->num_video_frames - 1);
 }
 
 static void

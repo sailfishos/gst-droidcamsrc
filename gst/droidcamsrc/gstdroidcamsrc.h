@@ -47,8 +47,9 @@ G_BEGIN_DECLS
 #define DEFAULT_IMG_WIDTH                  640
 #define DEFAULT_IMG_HEIGHT                 480
 
-#define DEFAULT_VIDEO_WIDTH                640
-#define DEFAULT_VIDEO_HEIGHT               480
+/* TODO: this should be VGA but our b0rked caps handling needs this. */
+#define DEFAULT_VIDEO_WIDTH                1280
+#define DEFAULT_VIDEO_HEIGHT               720
 
 #define DEFAULT_FPS                        30
 
