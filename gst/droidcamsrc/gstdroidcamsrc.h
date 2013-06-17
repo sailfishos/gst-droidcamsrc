@@ -41,13 +41,18 @@ G_BEGIN_DECLS
 #define GST_DROID_CAM_SRC_GET_CLASS(obj) \
   (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_DROID_CAM_SRC, GstDroidCamSrcClass))
 
-#define DEFAULT_VF_WIDTH         640
-#define DEFAULT_VF_HEIGHT        480
+#define DEFAULT_VF_WIDTH                   640
+#define DEFAULT_VF_HEIGHT                  480
 
-#define DEFAULT_IMG_WIDTH        640
-#define DEFAULT_IMG_HEIGHT       480
+#define DEFAULT_IMG_WIDTH                  640
+#define DEFAULT_IMG_HEIGHT                 480
 
-#define DEFAULT_FPS           30
+#define DEFAULT_VIDEO_WIDTH                640
+#define DEFAULT_VIDEO_HEIGHT               480
+
+#define DEFAULT_FPS                        30
+
+#define GST_DROID_CAM_SRC_VIDEO_CAPS_NAME  "video/x-raw-data"
 
 typedef struct _GstDroidCamSrc GstDroidCamSrc;
 typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;
@@ -83,17 +88,23 @@ struct _GstDroidCamSrc {
   GMutex capturing_mutex;
 
   gboolean image_renegotiate;
+  gboolean video_renegotiate;
 
   GQueue *img_queue;
   GCond img_cond;
   GMutex img_lock;
   gboolean img_task_running;
-  /*
+
   GQueue *video_queue;
   GCond video_cond;
   GMutex video_lock;
   gboolean video_task_running;
-  */
+
+  GMutex pushed_video_frames_lock;
+  GCond pushed_video_frames_cond;
+  int pushed_video_frames;
+
+  int num_video_frames;
 };
 
 struct _GstDroidCamSrcClass {

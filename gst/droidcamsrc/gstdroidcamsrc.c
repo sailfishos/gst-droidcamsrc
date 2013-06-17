@@ -71,7 +71,7 @@ static GstStaticPadTemplate vidsrc_template =
 GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_VIDEO_PAD_NAME,
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("video/x-raw-data,"
+    GST_STATIC_CAPS (GST_DROID_CAM_SRC_VIDEO_CAPS_NAME ","
         "framerate = (fraction) [ 0, MAX ], "
         "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ] "));
 
@@ -129,6 +129,7 @@ static gboolean gst_droid_cam_src_finish_capture (GstDroidCamSrc * src);
 
 static void gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src,
     gboolean apply);
+static void gst_droid_cam_src_free_video_buffer (gpointer data);
 
 enum
 {
@@ -149,6 +150,12 @@ enum
 };
 
 static guint droidcamsrc_signals[LAST_SIGNAL];
+
+typedef struct
+{
+  GstBuffer *buffer;
+  GstDroidCamSrc *src;
+} GstDroidCamSrcVideoBufferData;
 
 static void
 gst_droid_cam_src_base_init (gpointer gclass)
@@ -247,11 +254,21 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   g_mutex_init (&src->capturing_mutex);
 
   src->image_renegotiate = TRUE;
+  src->video_renegotiate = TRUE;
 
   g_mutex_init (&src->img_lock);
   g_cond_init (&src->img_cond);
   src->img_task_running = FALSE;
   src->img_queue = g_queue_new ();
+
+  src->video_task_running = FALSE;
+  g_mutex_init (&src->video_lock);
+  g_cond_init (&src->video_cond);
+  src->video_queue = g_queue_new ();
+
+  src->pushed_video_frames = 0;
+  g_mutex_init (&src->pushed_video_frames_lock);
+  g_cond_init (&src->pushed_video_frames_cond);
 
   src->vfsrc = gst_vf_src_pad_new (&vfsrc_template,
       GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME);
@@ -283,6 +300,13 @@ gst_droid_cam_src_finalize (GObject * object)
   g_cond_clear (&src->img_cond);
 
   g_queue_free_full (src->img_queue, (GDestroyNotify) gst_buffer_unref);
+
+  g_mutex_clear (&src->video_lock);
+  g_cond_clear (&src->video_cond);
+  g_queue_free (src->video_queue);
+
+  g_mutex_clear (&src->pushed_video_frames_lock);
+  g_cond_clear (&src->pushed_video_frames_cond);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -588,6 +612,7 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
 
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       src->image_renegotiate = TRUE;
+      src->video_renegotiate = TRUE;
       /* TODO: is this the right thing to do? */
       /* TODO: do we need locking here? */
       src->capturing = FALSE;
@@ -982,7 +1007,16 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
 
   GST_DEBUG_OBJECT (src, "start video capture unlocked");
 
-  // TODO: negotiation?
+  /* Do we need to renegotiate ? */
+  if (src->video_renegotiate) {
+    if (!gst_vid_src_pad_renegotiate (src->vidsrc)) {
+      GST_WARNING_OBJECT (src, "Failed to negotiate video capture caps");
+
+      return FALSE;
+    }
+
+    src->video_renegotiate = FALSE;
+  }
   // TODO: activate task?
   // TODO: new segment flag?
 
@@ -1000,6 +1034,11 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
     goto out;
   }
 #endif
+
+  g_mutex_lock (&src->pushed_video_frames_lock);
+  src->pushed_video_frames = 9;
+  g_mutex_unlock (&src->pushed_video_frames_lock);
+  src->num_video_frames = 0;
 
   err = src->dev->ops->start_recording (src->dev);
   if (err != 0) {
@@ -1022,6 +1061,8 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
     return FALSE;
   }
 
+  GST_LOG_OBJECT (src, "done");
+
   return TRUE;
 
 out:
@@ -1040,6 +1081,9 @@ static void
 gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
 {
   GST_DEBUG_OBJECT (src, "stop video capture");
+
+  /* First we send EOS */
+  /* Then we wait for all buffers to be returned */
 
   src->dev->ops->stop_recording (src->dev);
 }
@@ -1196,6 +1240,12 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
   GstDroidCamSrc *src;
   void *video_data;
   int size;
+  GstBuffer *buff;
+  GstClock *clock;
+  GstClockTime ts;
+  GstClockTime duration;
+  GstCaps *caps;
+  GstDroidCamSrcVideoBufferData *malloc_data;
 
   src = (GstDroidCamSrc *) user;
 
@@ -1205,7 +1255,56 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
 
   GST_LOG_OBJECT (src, "received video data %p of size %i", video_data, size);
 
-  src->dev->ops->release_recording_frame (src->dev, video_data);
+  /* TODO: We will ignore the provided timestamp for now */
+
+  g_mutex_lock (&src->pushed_video_frames_lock);
+  ++src->pushed_video_frames;
+  g_mutex_unlock (&src->pushed_video_frames_lock);
+
+  buff = gst_buffer_new ();
+
+  GST_BUFFER_OFFSET (buff) = src->num_video_frames++;
+  GST_BUFFER_OFFSET_END (buff) = src->num_video_frames;
+
+  GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+  duration = src->pool->buffer_duration;
+  GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+  GST_OBJECT_LOCK (src);
+  clock = GST_ELEMENT_CLOCK (src);
+
+  if (clock) {
+    ts = gst_clock_get_time (clock) - GST_ELEMENT (src)->base_time;
+  } else {
+    ts = GST_CLOCK_TIME_NONE;
+  }
+
+  GST_OBJECT_UNLOCK (src);
+
+  GST_BUFFER_DURATION (buff) = duration;
+
+  if (ts > duration) {
+    ts -= duration;
+  }
+
+  GST_BUFFER_TIMESTAMP (buff) = ts;
+  GST_BUFFER_SIZE (buff) = size;
+
+  malloc_data = g_slice_new (GstDroidCamSrcVideoBufferData);
+  malloc_data->buffer = buff;
+  malloc_data->src = src;
+
+  caps = gst_pad_get_negotiated_caps (src->vidsrc);
+  gst_buffer_set_caps (buff, caps);
+  gst_caps_unref (caps);
+  GST_BUFFER_DATA (buff) = video_data;
+  GST_BUFFER_MALLOCDATA (buff) = (gpointer) malloc_data;
+  GST_BUFFER_FREE_FUNC (buff) = gst_droid_cam_src_free_video_buffer;
+
+  g_mutex_lock (&src->video_lock);
+  g_queue_push_tail (src->video_queue, buff);
+  g_cond_signal (&src->video_cond);
+  g_mutex_unlock (&src->video_lock);
 }
 
 static void
@@ -1240,4 +1339,25 @@ gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src, gboolean apply)
   if (apply) {
     gst_droid_cam_src_set_camera_params (src);
   }
+}
+
+static void
+gst_droid_cam_src_free_video_buffer (gpointer data)
+{
+  GstDroidCamSrcVideoBufferData *malloc_data =
+      (GstDroidCamSrcVideoBufferData *) data;
+  GstDroidCamSrc *src = malloc_data->src;
+  GstBuffer *buffer = malloc_data->buffer;
+
+  GST_DEBUG_OBJECT (src, "free video buffer");
+
+  src->dev->ops->release_recording_frame (src->dev, GST_BUFFER_DATA (buffer));
+
+  g_mutex_lock (&src->pushed_video_frames_lock);
+  --src->pushed_video_frames;
+  g_cond_signal (&src->pushed_video_frames_cond);
+
+  g_mutex_unlock (&src->pushed_video_frames_lock);
+
+  g_slice_free (GstDroidCamSrcVideoBufferData, data);
 }

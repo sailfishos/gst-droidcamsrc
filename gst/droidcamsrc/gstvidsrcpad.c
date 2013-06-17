@@ -24,7 +24,7 @@
 
 GST_DEBUG_CATEGORY_STATIC (droidvidsrc_debug);
 #define GST_CAT_DEFAULT droidvidsrc_debug
-#if 0
+
 static gboolean gst_droid_cam_src_vidsrc_setcaps (GstPad * pad, GstCaps * caps);
 static GstCaps *gst_droid_cam_src_vidsrc_getcaps (GstPad * pad);
 static void gst_droid_cam_src_vidsrc_fixatecaps (GstPad * pad, GstCaps * caps);
@@ -37,7 +37,6 @@ static void gst_droid_cam_src_vidsrc_loop (gpointer data);
 static gboolean gst_droid_cam_src_vidsrc_negotiate (GstDroidCamSrc * src);
 
 /* TODO: Check any potential events needed by camerabin2 (start capture, finish capture, ...) */
-#endif
 
 GstPad *
 gst_vid_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
@@ -47,9 +46,10 @@ gst_vid_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
       "Android camera video source pad");
 
   GstPad *pad = gst_pad_new_from_static_template (pad_template, name);
-#if 0
+
   gst_pad_set_setcaps_function (pad, gst_droid_cam_src_vidsrc_setcaps);
   gst_pad_set_getcaps_function (pad, gst_droid_cam_src_vidsrc_getcaps);
+
   gst_pad_set_fixatecaps_function (pad, gst_droid_cam_src_vidsrc_fixatecaps);
   gst_pad_set_activatepush_function (pad,
       gst_droid_cam_src_vidsrc_activatepush);
@@ -59,11 +59,9 @@ gst_vid_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
 
   /* TODO: install an event handler via gst_pad_set_event_function() to catch renegotiation. */
 
-#endif
   return pad;
 }
 
-#if 0
 static gboolean
 gst_droid_cam_src_vidsrc_setcaps (GstPad * pad, GstCaps * caps)
 {
@@ -87,9 +85,10 @@ gst_droid_cam_src_vidsrc_setcaps (GstPad * pad, GstCaps * caps)
   }
 
   GST_OBJECT_LOCK (src);
-  camera_params_set_capture_size (src->camera_params, width, height);
+  camera_params_set_video_size (src->camera_params, width, height);
   GST_OBJECT_UNLOCK (src);
 
+  /* TODO: We are not yet setting framerate */
   return klass->set_camera_params (src);
 }
 
@@ -104,7 +103,7 @@ gst_droid_cam_src_vidsrc_getcaps (GstPad * pad)
   GST_OBJECT_LOCK (src);
 
   if (src->camera_params) {
-    caps = camera_params_get_capture_caps (src->camera_params);
+    caps = camera_params_get_video_caps (src->camera_params);
   } else {
     caps = gst_caps_copy (gst_pad_get_pad_template_caps (pad));
   }
@@ -128,8 +127,8 @@ gst_droid_cam_src_vidsrc_fixatecaps (GstPad * pad, GstCaps * caps)
 
   s = gst_caps_get_structure (caps, 0);
 
-  gst_structure_fixate_field_nearest_int (s, "width", DEFAULT_IMG_WIDTH);
-  gst_structure_fixate_field_nearest_int (s, "height", DEFAULT_IMG_HEIGHT);
+  gst_structure_fixate_field_nearest_int (s, "width", DEFAULT_VIDEO_WIDTH);
+  gst_structure_fixate_field_nearest_int (s, "height", DEFAULT_VIDEO_HEIGHT);
   gst_structure_fixate_field_nearest_fraction (s, "framerate", DEFAULT_FPS, 1);
 
   GST_DEBUG_OBJECT (src, "caps now is %" GST_PTR_FORMAT, caps);
@@ -155,14 +154,14 @@ gst_droid_cam_src_vidsrc_activatepush (GstPad * pad, gboolean active)
     /* Then we start our task */
     GST_PAD_STREAM_LOCK (pad);
 
-    g_mutex_lock (&src->img_lock);
-    src->img_task_running = TRUE;
+    g_mutex_lock (&src->video_lock);
+    src->video_task_running = TRUE;
 
     started = gst_pad_start_task (pad, gst_droid_cam_src_vidsrc_loop, pad);
     if (!started) {
-      src->img_task_running = FALSE;
+      src->video_task_running = FALSE;
 
-      g_mutex_unlock (&src->img_lock);
+      g_mutex_unlock (&src->video_lock);
 
       GST_PAD_STREAM_UNLOCK (pad);
 
@@ -172,20 +171,19 @@ gst_droid_cam_src_vidsrc_activatepush (GstPad * pad, gboolean active)
       return FALSE;
     }
 
-    g_mutex_unlock (&src->img_lock);
+    g_mutex_unlock (&src->video_lock);
 
     GST_PAD_STREAM_UNLOCK (pad);
-
   } else {
     GST_DEBUG_OBJECT (src, "stopping task");
 
-    g_mutex_lock (&src->img_lock);
+    g_mutex_lock (&src->video_lock);
 
-    src->img_task_running = FALSE;
+    src->video_task_running = FALSE;
 
-    g_cond_signal (&src->img_cond);
+    g_cond_signal (&src->video_cond);
 
-    g_mutex_unlock (&src->img_lock);
+    g_mutex_unlock (&src->video_lock);
 
     gst_pad_stop_task (pad);
 
@@ -196,7 +194,7 @@ gst_droid_cam_src_vidsrc_activatepush (GstPad * pad, gboolean active)
 }
 
 gboolean
-gst_img_src_pad_renegotiate (GstPad * pad)
+gst_vid_src_pad_renegotiate (GstPad * pad)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_PAD_PARENT (pad));
 
@@ -216,44 +214,43 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
 
   GST_DEBUG_OBJECT (src, "loop");
 
-  g_mutex_lock (&src->img_lock);
+  g_mutex_lock (&src->video_lock);
 
-  if (src->image_renegotiate) {
+  if (src->video_renegotiate) {
     /* TODO: handle renegotiation */
   }
 
-  if (!src->img_task_running) {
-    g_mutex_unlock (&src->img_lock);
+  if (!src->video_task_running) {
+    g_mutex_unlock (&src->video_lock);
 
     GST_DEBUG_OBJECT (src, "task not running");
     return;
   }
 
-  if (src->img_queue->length > 0) {
-    buffer = g_queue_pop_head (src->img_queue);
-    g_mutex_unlock (&src->img_lock);
+  if (src->video_queue->length > 0) {
+    buffer = g_queue_pop_head (src->video_queue);
+    g_mutex_unlock (&src->video_lock);
 
     goto push_buffer;
   }
 
-  g_cond_wait (&src->img_cond, &src->img_lock);
+  g_cond_wait (&src->video_cond, &src->video_lock);
 
-  if (!src->img_task_running) {
-    g_mutex_unlock (&src->img_lock);
+  if (!src->video_task_running) {
+    g_mutex_unlock (&src->video_lock);
 
     GST_DEBUG_OBJECT (src, "task not running");
     return;
   }
 
-  buffer = g_queue_pop_head (src->img_queue);
-  g_mutex_unlock (&src->img_lock);
+  buffer = g_queue_pop_head (src->video_queue);
+  g_mutex_unlock (&src->video_lock);
 
 push_buffer:
+  /* TODO: hmmm */
   if (!klass->open_segment (src, src->vidsrc)) {
     GST_WARNING_OBJECT (src, "failed to push new segment");
   }
-
-  klass->update_segment (src, buffer);
 
   ret = gst_pad_push (src->vidsrc, buffer);
 
@@ -309,9 +306,9 @@ gst_droid_cam_src_vidsrc_negotiate (GstDroidCamSrc * src)
     gst_caps_unref (caps);
 
     /* Use default. */
-    caps = gst_caps_new_simple ("image/jpeg",
-        "width", G_TYPE_INT, DEFAULT_IMG_WIDTH,
-        "height", G_TYPE_INT, DEFAULT_IMG_HEIGHT,
+    caps = gst_caps_new_simple (GST_DROID_CAM_SRC_VIDEO_CAPS_NAME,
+        "width", G_TYPE_INT, DEFAULT_VIDEO_WIDTH,
+        "height", G_TYPE_INT, DEFAULT_VIDEO_HEIGHT,
         "framerate", GST_TYPE_FRACTION, DEFAULT_FPS, 1, NULL);
 
     GST_DEBUG_OBJECT (src, "using default caps %" GST_PTR_FORMAT, caps);
@@ -400,4 +397,3 @@ gst_droid_cam_src_vidsrc_query (GstPad * pad, GstQuery * query)
 
   return ret;
 }
-#endif
