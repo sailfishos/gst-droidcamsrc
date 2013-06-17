@@ -116,12 +116,10 @@ static void gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src);
 static void gst_droid_cam_src_data_callback (int32_t msg_type,
     const camera_memory_t * mem, unsigned int index,
     camera_frame_metadata_t * metadata, void *user_data);
-/*
+
 static void gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
-        int32_t msg_type,
-        const camera_memory_t *data, unsigned int index,
-						       void *user);
-*/
+    int32_t msg_type, const camera_memory_t * data, unsigned int index,
+    void *user);
 
 static void gst_droid_cam_src_handle_compressed_image (GstDroidCamSrc * src,
     const camera_memory_t * mem, unsigned int index,
@@ -467,7 +465,8 @@ gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src)
 
   /* TODO: Complete this when we know what we need */
   src->dev->ops->set_callbacks (src->dev, NULL, // notify_cb
-      gst_droid_cam_src_data_callback, NULL, gst_camera_memory_get, src);
+      gst_droid_cam_src_data_callback,
+      gst_droid_cam_src_data_timestamp_callback, gst_camera_memory_get, src);
 
   err = src->dev->ops->set_preview_window (src->dev, &src->pool->window);
 
@@ -766,7 +765,6 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
 
   src->dev->ops->enable_msg_type (src->dev, CAMERA_MSG_ALL_MSGS);
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_PREVIEW_FRAME);
-  src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_VIDEO_FRAME);
 
   err = src->dev->ops->start_preview (src->dev);
   if (err != 0) {
@@ -992,7 +990,7 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
   if (!gst_droid_cam_src_flush_buffers (src)) {
     return FALSE;
   }
-
+#if 0
   err = src->dev->ops->store_meta_data_in_buffers (src->dev, 1);
   if (err != 0) {
     GST_WARNING_OBJECT (src,
@@ -1001,6 +999,7 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
     ret = FALSE;
     goto out;
   }
+#endif
 
   err = src->dev->ops->start_recording (src->dev);
   if (err != 0) {
@@ -1189,11 +1188,10 @@ gst_droid_cam_src_data_callback (int32_t msg_type, const camera_memory_t * mem,
   }
 }
 
-#if 0
 static void
 gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
-    int32_t msg_type,
-    const camera_memory_t * data, unsigned int index, void *user)
+    int32_t msg_type, const camera_memory_t * data,
+    unsigned int index, void *user)
 {
   GstDroidCamSrc *src;
   void *video_data;
@@ -1209,7 +1207,6 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
 
   src->dev->ops->release_recording_frame (src->dev, video_data);
 }
-#endif
 
 static void
 gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src, gboolean apply)
