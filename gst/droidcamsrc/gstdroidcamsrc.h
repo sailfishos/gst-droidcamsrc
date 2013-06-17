@@ -75,6 +75,7 @@ struct _GstDroidCamSrc {
 
   GstPad *vfsrc;
   GstPad *imgsrc;
+  GstPad *vidsrc;
 
   gboolean send_new_segment;
 
@@ -87,6 +88,12 @@ struct _GstDroidCamSrc {
   GCond img_cond;
   GMutex img_lock;
   gboolean img_task_running;
+  /*
+  GQueue *video_queue;
+  GCond video_cond;
+  GMutex video_lock;
+  gboolean video_task_running;
+  */
 };
 
 struct _GstDroidCamSrcClass {

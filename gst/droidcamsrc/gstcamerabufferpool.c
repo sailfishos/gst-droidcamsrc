@@ -652,3 +652,35 @@ gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
 
   GST_MINI_OBJECT_CLASS (parent_class)->finalize (GST_MINI_OBJECT (pool));
 }
+
+void
+gst_camera_buffer_pool_drain_app_queue (GstCameraBufferPool * pool)
+{
+  int count;
+
+  GST_DEBUG_OBJECT (pool, "drain app queue");
+
+  count = 0;
+
+  g_mutex_lock (&pool->app_lock);
+  g_mutex_lock (&pool->hal_lock);
+
+  while (pool->app_queue->length > 0) {
+    GstBuffer *buffer = g_queue_pop_head (pool->app_queue);
+
+    GST_LOG_OBJECT (pool, "popped buffer %p", buffer);
+
+    g_queue_push_tail (pool->hal_queue, buffer);
+
+    ++count;
+  }
+
+  if (count > 0) {
+    g_cond_signal (&pool->hal_cond);
+  }
+
+  g_mutex_unlock (&pool->hal_lock);
+  g_mutex_unlock (&pool->app_lock);
+
+  GST_DEBUG_OBJECT (pool, "popped %d buffers from app queue", count);
+}

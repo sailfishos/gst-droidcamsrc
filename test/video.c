@@ -77,7 +77,7 @@ main (int argc, char *argv[])
   gst_object_unref (pad);
 
   g_timeout_add (5000, start_video_capture, pipeline);
-  g_timeout_add (15000, stop_video_capture, pipeline);
+  g_timeout_add (10000, stop_video_capture, pipeline);
 
-  return test_pipeline_exec (pipeline, 20000);
+  return test_pipeline_exec (pipeline, 11000);
 }

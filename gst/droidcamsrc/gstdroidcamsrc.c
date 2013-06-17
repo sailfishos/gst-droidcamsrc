@@ -37,6 +37,7 @@
 #include "enums.h"
 #include "gstvfsrcpad.h"
 #include "gstimgsrcpad.h"
+#include "gstvidsrcpad.h"
 
 #define DEFAULT_CAMERA_DEVICE 0
 #define DEFAULT_MODE          MODE_IMAGE
@@ -70,7 +71,9 @@ static GstStaticPadTemplate vidsrc_template =
 GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_VIDEO_PAD_NAME,
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS_ANY);
+    GST_STATIC_CAPS ("video/x-raw-data,"
+        "framerate = (fraction) [ 0, MAX ], "
+        "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ] "));
 
 static void gst_droid_cam_src_finalize (GObject * object);
 static void gst_droid_cam_src_get_property (GObject * object, guint prop_id,
@@ -103,12 +106,22 @@ static void gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src);
 static void gst_droid_cam_src_start_capture (GstDroidCamSrc * src);
 static void gst_droid_cam_src_stop_capture (GstDroidCamSrc * src);
 
+static gboolean gst_droid_cam_src_flush_buffers (GstDroidCamSrc * src);
 static gboolean gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc *
     src);
+static gboolean gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc *
+    src);
+static void gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src);
 
 static void gst_droid_cam_src_data_callback (int32_t msg_type,
     const camera_memory_t * mem, unsigned int index,
     camera_frame_metadata_t * metadata, void *user_data);
+/*
+static void gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
+        int32_t msg_type,
+        const camera_memory_t *data, unsigned int index,
+						       void *user);
+*/
 
 static void gst_droid_cam_src_handle_compressed_image (GstDroidCamSrc * src,
     const camera_memory_t * mem, unsigned int index,
@@ -249,6 +262,10 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->imgsrc = gst_img_src_pad_new (&imgsrc_template,
       GST_BASE_CAMERA_SRC_IMAGE_PAD_NAME);
   gst_element_add_pad (GST_ELEMENT (src), src->imgsrc);
+
+  src->vidsrc = gst_vid_src_pad_new (&vidsrc_template,
+      GST_BASE_CAMERA_SRC_VIDEO_PAD_NAME);
+  gst_element_add_pad (GST_ELEMENT (src), src->vidsrc);
 }
 
 static void
@@ -450,8 +467,7 @@ gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src)
 
   /* TODO: Complete this when we know what we need */
   src->dev->ops->set_callbacks (src->dev, NULL, // notify_cb
-      gst_droid_cam_src_data_callback, NULL,    // data_cb_timestamp
-      gst_camera_memory_get, src);
+      gst_droid_cam_src_data_callback, NULL, gst_camera_memory_get, src);
 
   err = src->dev->ops->set_preview_window (src->dev, &src->pool->window);
 
@@ -750,7 +766,7 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
 
   src->dev->ops->enable_msg_type (src->dev, CAMERA_MSG_ALL_MSGS);
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_PREVIEW_FRAME);
-  src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_RAW_IMAGE);
+  src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_VIDEO_FRAME);
 
   err = src->dev->ops->start_preview (src->dev);
   if (err != 0) {
@@ -777,6 +793,8 @@ gst_droid_cam_src_stop_pipeline (GstDroidCamSrc * src)
 static void
 gst_droid_cam_src_start_capture (GstDroidCamSrc * src)
 {
+  gboolean started;
+
   GST_DEBUG_OBJECT (src, "start capture");
 
   g_mutex_lock (&src->capturing_mutex);
@@ -795,25 +813,31 @@ gst_droid_cam_src_start_capture (GstDroidCamSrc * src)
   src->capturing = TRUE;
   g_object_notify (G_OBJECT (src), "ready-for-capture");
 
-  if (src->mode == MODE_IMAGE) {
-    if (!gst_droid_cam_src_start_image_capture_unlocked (src)) {
-      src->capturing = FALSE;
-      g_object_notify (G_OBJECT (src), "ready-for-capture");
+  switch (src->mode) {
+    case MODE_IMAGE:
+      started = gst_droid_cam_src_start_image_capture_unlocked (src);
+      break;
 
-      g_mutex_unlock (&src->capturing_mutex);
+    case MODE_VIDEO:
+      started = gst_droid_cam_src_start_video_capture_unlocked (src);
+      break;
 
-      /* notify camerabin2 that the capture failed */
-      GST_ELEMENT_WARNING (src, RESOURCE, FAILED, (NULL), (NULL));
+    default:
+      started = FALSE;
+      break;
+  }
 
-    } else {
-      g_mutex_unlock (&src->capturing_mutex);
-    }
-  } else if (src->mode == MODE_VIDEO) {
-    /* TODO: */
+  if (!started) {
+    src->capturing = FALSE;
+    g_object_notify (G_OBJECT (src), "ready-for-capture");
+
     g_mutex_unlock (&src->capturing_mutex);
+
+    /* notify camerabin2 that the capture failed */
+    GST_ELEMENT_WARNING (src, RESOURCE, FAILED, (NULL), (NULL));
+
   } else {
     g_mutex_unlock (&src->capturing_mutex);
-    g_assert_not_reached ();
   }
 }
 
@@ -826,10 +850,52 @@ gst_droid_cam_src_stop_capture (GstDroidCamSrc * src)
     GST_DEBUG_OBJECT (src, "stop capture not needed for image mode");
     return;
   } else if (src->mode == MODE_VIDEO) {
-    /* TODO: video mode */
+    gst_droid_cam_src_stop_video_capture (src);
   } else {
     g_assert_not_reached ();
   }
+}
+
+static gboolean
+gst_droid_cam_src_flush_buffers (GstDroidCamSrc * src)
+{
+  GST_DEBUG_OBJECT (src, "flush buffers");
+
+  /* unlock our pad */
+  GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+  src->pool->flushing = TRUE;
+  GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+  gst_camera_buffer_pool_unlock_app_queue (src->pool);
+  /* task has been paused by now */
+  GST_PAD_STREAM_LOCK (src->vfsrc);
+  GST_PAD_STREAM_UNLOCK (src->vfsrc);
+
+  if (!gst_pad_push_event (src->vfsrc, gst_event_new_flush_start ())) {
+    GST_WARNING_OBJECT (src, "failed to push flush start event");
+    return FALSE;
+  }
+
+  GST_PAD_STREAM_LOCK (src->vfsrc);
+
+  if (!gst_pad_push_event (src->vfsrc, gst_event_new_flush_stop ())) {
+    GST_WARNING_OBJECT (src, "failed to push flush stop event");
+    return FALSE;
+  }
+
+  GST_PAD_STREAM_UNLOCK (src->vfsrc);
+
+  gst_pad_stop_task (src->vfsrc);
+
+  /* clear any pending events */
+  GST_OBJECT_LOCK (src);
+  g_list_free_full (src->events, (GDestroyNotify) gst_event_unref);
+  src->events = NULL;
+  GST_OBJECT_UNLOCK (src);
+
+  gst_camera_buffer_pool_drain_app_queue (src->pool);
+
+  return TRUE;
 }
 
 /* with capturing_lock */
@@ -850,7 +916,11 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
 
     src->image_renegotiate = FALSE;
   }
-
+  // First we need to flush the viewfinder branch of the pipeline:
+  if (!gst_droid_cam_src_flush_buffers (src)) {
+    return FALSE;
+  }
+#if 0
   /* unlock our pad */
   GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
   src->pool->flushing = TRUE;
@@ -892,6 +962,7 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
   g_list_free_full (src->events, (GDestroyNotify) gst_event_unref);
   src->events = NULL;
   GST_OBJECT_UNLOCK (src);
+#endif
 
   /* start actual capturing */
   err = src->dev->ops->take_picture (src->dev);
@@ -902,6 +973,76 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
   }
 
   return TRUE;
+}
+
+/* with capturing_lock */
+static gboolean
+gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
+{
+  int err;
+  gboolean ret;
+
+  GST_DEBUG_OBJECT (src, "start video capture unlocked");
+
+  // TODO: negotiation?
+  // TODO: activate task?
+  // TODO: new segment flag?
+
+  // First we need to flush the viewfinder branch of the pipeline:
+  if (!gst_droid_cam_src_flush_buffers (src)) {
+    return FALSE;
+  }
+
+  err = src->dev->ops->store_meta_data_in_buffers (src->dev, 1);
+  if (err != 0) {
+    GST_WARNING_OBJECT (src,
+        "failed to enable meta data storage in video buffers: %d", err);
+
+    ret = FALSE;
+    goto out;
+  }
+
+  err = src->dev->ops->start_recording (src->dev);
+  if (err != 0) {
+    GST_WARNING_OBJECT (src, "failed to start video recording: %d");
+
+    ret = FALSE;
+    goto out;
+  }
+
+  GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+  src->pool->flushing = FALSE;
+  GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+  if (!gst_vf_src_pad_start_task (src->vfsrc)) {
+    GST_ERROR_OBJECT (src, "Failed to start viewfinder task");
+    GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+    src->pool->flushing = TRUE;
+    GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+    return FALSE;
+  }
+
+  return TRUE;
+
+out:
+  GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+  src->pool->flushing = TRUE;
+  GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
+
+  if (!gst_vf_src_pad_start_task (src->vfsrc)) {
+    GST_ERROR_OBJECT (src, "Failed to start viewfinder task");
+  }
+
+  return ret;
+}
+
+static void
+gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
+{
+  GST_DEBUG_OBJECT (src, "stop video capture");
+
+  src->dev->ops->stop_recording (src->dev);
 }
 
 static void
@@ -1048,12 +1189,41 @@ gst_droid_cam_src_data_callback (int32_t msg_type, const camera_memory_t * mem,
   }
 }
 
+#if 0
+static void
+gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
+    int32_t msg_type,
+    const camera_memory_t * data, unsigned int index, void *user)
+{
+  GstDroidCamSrc *src;
+  void *video_data;
+  int size;
+
+  src = (GstDroidCamSrc *) user;
+
+  GST_DEBUG_OBJECT (src, "data timestamp callback");
+
+  video_data = gst_camera_memory_get_data (data, index, &size);
+
+  GST_LOG_OBJECT (src, "received video data %p of size %i", video_data, size);
+
+  src->dev->ops->release_recording_frame (src->dev, video_data);
+}
+#endif
+
 static void
 gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src, gboolean apply)
 {
   GST_DEBUG_OBJECT (src, "set recording hint");
 
   GST_OBJECT_LOCK (src);
+
+  if (!src->camera_params) {
+    GST_OBJECT_UNLOCK (src);
+    GST_DEBUG_OBJECT (src,
+        "Not fully initialized. Deferring setting recording-hint");
+    return;
+  }
 
   switch (src->mode) {
     case MODE_IMAGE:
