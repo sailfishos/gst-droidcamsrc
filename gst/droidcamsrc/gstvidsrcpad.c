@@ -211,11 +211,11 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
 {
   GstPad *pad = (GstPad *) data;
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
-#if 0
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
-#endif
   GstBuffer *buffer;
   GstFlowReturn ret;
+  gboolean send_eos = FALSE;
+  gboolean send_new_segment = FALSE;
 
   GST_DEBUG_OBJECT (src, "loop");
 
@@ -232,6 +232,29 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
     return;
   }
 
+  g_mutex_lock (&src->video_capture_status_lock);
+  switch (src->video_capture_status) {
+    case VIDEO_CAPTURE_STARTING:
+      send_new_segment = TRUE;
+      break;
+
+    case VIDEO_CAPTURE_RUNNING:
+      break;
+
+    case VIDEO_CAPTURE_STOPPING:
+      send_eos = TRUE;
+      break;
+
+    case VIDEO_CAPTURE_DONE:
+      break;
+  }
+
+  g_mutex_unlock (&src->video_capture_status_lock);
+
+  if (send_eos) {
+    goto eos;
+  }
+
   if (src->video_queue->length > 0) {
     buffer = g_queue_pop_head (src->video_queue);
     g_mutex_unlock (&src->video_lock);
@@ -245,6 +268,7 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
     g_mutex_unlock (&src->video_lock);
 
     GST_DEBUG_OBJECT (src, "task not running");
+
     return;
   }
 
@@ -252,12 +276,26 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   g_mutex_unlock (&src->video_lock);
 
 push_buffer:
-#if 0
-  /* TODO: hmmm */
-  if (!klass->open_segment (src, src->vidsrc)) {
+  if (!buffer) {
+    /* This simply means that we are stopping recording
+     * and our cond was signalled. We will not do anything now
+     * but we should properly stop recording next time _loop () gets called
+     */
+    GST_DEBUG_OBJECT (src, "empty buffer. Not doing anything");
+    return;
+  }
+
+  if (send_new_segment && !klass->open_segment (src, src->vidsrc)) {
     GST_WARNING_OBJECT (src, "failed to push new segment");
   }
-#endif
+
+  if (send_new_segment) {
+    g_mutex_lock (&src->video_capture_status_lock);
+    src->video_capture_status = VIDEO_CAPTURE_RUNNING;
+    g_mutex_unlock (&src->video_capture_status_lock);
+  }
+
+  GST_DEBUG_OBJECT (src, "pushing buffer %p", buffer);
 
   ret = gst_pad_push (src->vidsrc, buffer);
 
@@ -270,6 +308,32 @@ push_buffer:
         ("streaming task paused, reason %s (%d)", gst_flow_get_name (ret),
             ret));
   }
+  return;
+eos:
+  GST_DEBUG_OBJECT (src, "performing EOS on video branch");
+  if (!gst_pad_push_event (src->vidsrc, gst_event_new_eos ())) {
+    GST_WARNING_OBJECT (src, "failed to send EOS to video branch");
+  }
+
+  g_mutex_lock (&src->video_capture_status_lock);
+  src->video_capture_status = VIDEO_CAPTURE_DONE;
+  g_mutex_unlock (&src->video_capture_status_lock);
+
+  if (src->video_queue->length > 0) {
+    buffer = g_queue_pop_head (src->video_queue);
+    gst_buffer_unref (buffer);
+  }
+
+  g_mutex_unlock (&src->video_lock);
+
+  GST_LOG_OBJECT (src, "pushed %d video frames", src->num_video_frames - 1);
+
+  g_mutex_lock (&src->capturing_mutex);
+
+  src->capturing = FALSE;
+  g_object_notify (G_OBJECT (src), "ready-for-capture");
+
+  g_mutex_unlock (&src->capturing_mutex);
 }
 
 static gboolean

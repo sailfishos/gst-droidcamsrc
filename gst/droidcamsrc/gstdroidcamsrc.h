@@ -55,6 +55,11 @@ G_BEGIN_DECLS
 
 #define GST_DROID_CAM_SRC_VIDEO_CAPS_NAME  "video/x-raw-data"
 
+#define VIDEO_CAPTURE_STARTING          0
+#define VIDEO_CAPTURE_RUNNING           1
+#define VIDEO_CAPTURE_STOPPING          2
+#define VIDEO_CAPTURE_DONE              3
+
 typedef struct _GstDroidCamSrc GstDroidCamSrc;
 typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;
 
@@ -104,6 +109,9 @@ struct _GstDroidCamSrc {
   GMutex pushed_video_frames_lock;
   GCond pushed_video_frames_cond;
   int pushed_video_frames;
+
+  GMutex video_capture_status_lock;
+  int video_capture_status;
 
   int num_video_frames;
 };

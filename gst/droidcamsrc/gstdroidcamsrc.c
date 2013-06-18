@@ -270,6 +270,9 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   g_mutex_init (&src->pushed_video_frames_lock);
   g_cond_init (&src->pushed_video_frames_cond);
 
+  src->video_capture_status = VIDEO_CAPTURE_DONE;
+  g_mutex_init (&src->video_capture_status_lock);
+
   src->vfsrc = gst_vf_src_pad_new (&vfsrc_template,
       GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME);
   gst_element_add_pad (GST_ELEMENT (src), src->vfsrc);
@@ -307,6 +310,8 @@ gst_droid_cam_src_finalize (GObject * object)
 
   g_mutex_clear (&src->pushed_video_frames_lock);
   g_cond_clear (&src->pushed_video_frames_cond);
+
+  g_mutex_clear (&src->video_capture_status_lock);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -874,6 +879,7 @@ gst_droid_cam_src_stop_capture (GstDroidCamSrc * src)
     return;
   } else if (src->mode == MODE_VIDEO) {
     gst_droid_cam_src_stop_video_capture (src);
+    /* videosrc loop() function will take care of updating ready-for-capture */
   } else {
     g_assert_not_reached ();
   }
@@ -1017,9 +1023,6 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
 
     src->video_renegotiate = FALSE;
   }
-  // TODO: activate task?
-  // TODO: new segment flag?
-
   // First we need to flush the viewfinder branch of the pipeline:
   if (!gst_droid_cam_src_flush_buffers (src)) {
     return FALSE;
@@ -1038,6 +1041,10 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
   src->pushed_video_frames = 0;
   g_mutex_unlock (&src->pushed_video_frames_lock);
   src->num_video_frames = 0;
+
+  g_mutex_lock (&src->video_capture_status_lock);
+  src->video_capture_status = VIDEO_CAPTURE_STARTING;
+  g_mutex_unlock (&src->video_capture_status_lock);
 
   err = src->dev->ops->start_recording (src->dev);
   if (err != 0) {
@@ -1082,30 +1089,24 @@ gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
   GST_DEBUG_OBJECT (src, "stop video capture");
 
   /* Stop video recording */
+  g_mutex_lock (&src->video_capture_status_lock);
+  src->video_capture_status = VIDEO_CAPTURE_STOPPING;
+  g_mutex_unlock (&src->video_capture_status_lock);
+
   src->dev->ops->stop_recording (src->dev);
 
-#if 0
-  /* Wait for the queue to be empty */
-  g_mutex_lock (&src->pushed_video_frames_lock);
+  /* We need to make sure the task gets executed.
+   * We have 3 cases here:
+   * 1) Either the task is waiting on the cond and this will wake it up
+   * 2) it's not and in that case it will respond to video_capture_status
+   *    the next time it gets executed
+   * 3) it's somewhere in the middle of the function and it will be like 2
+   */
 
-  while (src->pushed_video_frames > 0) {
-    g_cond_wait (&src->pushed_video_frames_cond,
-        &src->pushed_video_frames_lock);
-  }
-
-  g_mutex_unlock (&src->pushed_video_frames_lock);
-
-  g_assert (src->video_queue->length == 0);
-#endif
-
-  /* Now we send EOS */
-  GST_DEBUG_OBJECT (src, "pushing EOS to video branch");
-
-  if (!gst_pad_push_event (src->vidsrc, gst_event_new_eos ())) {
-    GST_WARNING_OBJECT (src, "Failed to push EOS to video branch");
-  }
-
-  GST_LOG_OBJECT (src, "pushed %d video frames", src->num_video_frames - 1);
+  /* Just in case the pool is empty */
+  g_mutex_lock (&src->video_lock);
+  g_cond_signal (&src->video_cond);
+  g_mutex_unlock (&src->video_lock);
 }
 
 static void
@@ -1266,14 +1267,31 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
   GstClockTime duration;
   GstCaps *caps;
   GstDroidCamSrcVideoBufferData *malloc_data;
+  gboolean drop_buffer = FALSE;
 
   src = (GstDroidCamSrc *) user;
 
   GST_DEBUG_OBJECT (src, "data timestamp callback");
 
   video_data = gst_camera_memory_get_data (data, index, &size);
+  /* TODO: this is bad for production */
+  g_assert (video_data != NULL);
 
   GST_LOG_OBJECT (src, "received video data %p of size %i", video_data, size);
+
+  g_mutex_lock (&src->video_capture_status_lock);
+  if (src->video_capture_status > VIDEO_CAPTURE_RUNNING) {
+    drop_buffer = TRUE;
+  }
+
+  g_mutex_unlock (&src->video_capture_status_lock);
+
+  if (drop_buffer) {
+    GST_DEBUG_OBJECT (src, "video recording is not running. Dropping buffer %p",
+        video_data);
+    src->dev->ops->release_recording_frame (src->dev, video_data);
+    return;
+  }
 
   /* TODO: We will ignore the provided timestamp for now */
 
