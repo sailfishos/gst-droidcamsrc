@@ -214,8 +214,9 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
   GstBuffer *buffer;
   GstFlowReturn ret;
-  gboolean send_eos = FALSE;
+  gboolean stop_recording = FALSE;
   gboolean send_new_segment = FALSE;
+  gboolean not_recording = FALSE;
 
   GST_DEBUG_OBJECT (src, "loop");
 
@@ -242,7 +243,11 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
       break;
 
     case VIDEO_CAPTURE_STOPPING:
-      send_eos = TRUE;
+      stop_recording = TRUE;
+      break;
+
+    case VIDEO_CAPTURE_STOPPED:
+      not_recording = TRUE;
       break;
 
     case VIDEO_CAPTURE_DONE:
@@ -251,8 +256,12 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
 
   g_mutex_unlock (&src->video_capture_status_lock);
 
-  if (send_eos) {
-    goto eos;
+  if (not_recording) {
+    GST_LOG_OBJECT (src, "Returning. Recording not running.");
+  }
+
+  if (stop_recording) {
+    goto stop_recording;
   }
 
   if (src->video_queue->length > 0) {
@@ -308,15 +317,27 @@ push_buffer:
         ("streaming task paused, reason %s (%d)", gst_flow_get_name (ret),
             ret));
   }
+
   return;
-eos:
+
+stop_recording:
+  GST_DEBUG_OBJECT (src, "stopping video recording");
+  if (!gst_pad_push_event (src->vidsrc, gst_event_new_flush_start ())) {
+    GST_WARNING_OBJECT (src, "failed to send FLUSH_START to video branch");
+  }
+
+  if (!gst_pad_push_event (src->vidsrc, gst_event_new_flush_stop ())) {
+    GST_WARNING_OBJECT (src, "failed to send FLUSH_STOP to video branch");
+  }
+
   GST_DEBUG_OBJECT (src, "performing EOS on video branch");
   if (!gst_pad_push_event (src->vidsrc, gst_event_new_eos ())) {
     GST_WARNING_OBJECT (src, "failed to send EOS to video branch");
   }
 
   g_mutex_lock (&src->video_capture_status_lock);
-  src->video_capture_status = VIDEO_CAPTURE_DONE;
+  src->video_capture_status = VIDEO_CAPTURE_STOPPED;
+  g_cond_signal (&src->video_capture_status_cond);
   g_mutex_unlock (&src->video_capture_status_lock);
 
   if (src->video_queue->length > 0) {
@@ -327,13 +348,6 @@ eos:
   g_mutex_unlock (&src->video_lock);
 
   GST_LOG_OBJECT (src, "pushed %d video frames", src->num_video_frames - 1);
-
-  g_mutex_lock (&src->capturing_mutex);
-
-  src->capturing = FALSE;
-  g_object_notify (G_OBJECT (src), "ready-for-capture");
-
-  g_mutex_unlock (&src->capturing_mutex);
 }
 
 static gboolean

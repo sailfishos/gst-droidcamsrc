@@ -58,7 +58,8 @@ G_BEGIN_DECLS
 #define VIDEO_CAPTURE_STARTING          0
 #define VIDEO_CAPTURE_RUNNING           1
 #define VIDEO_CAPTURE_STOPPING          2
-#define VIDEO_CAPTURE_DONE              3
+#define VIDEO_CAPTURE_STOPPED           3
+#define VIDEO_CAPTURE_DONE              4
 
 typedef struct _GstDroidCamSrc GstDroidCamSrc;
 typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;
@@ -111,6 +112,8 @@ struct _GstDroidCamSrc {
   int pushed_video_frames;
 
   GMutex video_capture_status_lock;
+  GCond video_capture_status_cond;
+
   int video_capture_status;
 
   int num_video_frames;

@@ -272,6 +272,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
 
   src->video_capture_status = VIDEO_CAPTURE_DONE;
   g_mutex_init (&src->video_capture_status_lock);
+  g_cond_init (&src->video_capture_status_cond);
 
   src->vfsrc = gst_vf_src_pad_new (&vfsrc_template,
       GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME);
@@ -312,6 +313,7 @@ gst_droid_cam_src_finalize (GObject * object)
   g_cond_clear (&src->pushed_video_frames_cond);
 
   g_mutex_clear (&src->video_capture_status_lock);
+  g_cond_clear (&src->video_capture_status_cond);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -1086,27 +1088,65 @@ out:
 static void
 gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
 {
-  GST_DEBUG_OBJECT (src, "stop video capture");
-
-  /* Stop video recording */
-  g_mutex_lock (&src->video_capture_status_lock);
-  src->video_capture_status = VIDEO_CAPTURE_STOPPING;
-  g_mutex_unlock (&src->video_capture_status_lock);
-
-  src->dev->ops->stop_recording (src->dev);
-
-  /* We need to make sure the task gets executed.
-   * We have 3 cases here:
-   * 1) Either the task is waiting on the cond and this will wake it up
-   * 2) it's not and in that case it will respond to video_capture_status
-   *    the next time it gets executed
-   * 3) it's somewhere in the middle of the function and it will be like 2
+  /*
+   * We cannot simply stop recording and process all the remaining frames.
+   * Android HAL will free all the memory handed to us upon stopping
+   * recording.
+   * The only reasonable way to stop recording is to make sure no frames are still
+   * held by any elements and then only we can stop recording.
    */
 
-  /* Just in case the pool is empty */
+  GST_DEBUG_OBJECT (src, "stop video capture");
+
+  /*
+   * First we tell gst_droid_cam_src_data_timestamp_callback() and
+   * our vidsrc pad loop function that we are stopping video recording.
+   */
+
+  g_mutex_lock (&src->video_capture_status_lock);
+  src->video_capture_status = VIDEO_CAPTURE_STOPPING;
+
+  /*
+   * We are discarding all new buffers and the queue might be empty.
+   * We will signal our vidsrc loop thread.
+   */
+
   g_mutex_lock (&src->video_lock);
   g_cond_signal (&src->video_cond);
   g_mutex_unlock (&src->video_lock);
+
+  g_cond_wait (&src->video_capture_status_cond,
+      &src->video_capture_status_lock);
+
+  g_assert (src->video_capture_status == VIDEO_CAPTURE_STOPPED);
+
+  g_mutex_unlock (&src->video_capture_status_lock);
+
+  /* Make sure the video queue is empty */
+  g_mutex_lock (&src->video_lock);
+  while (src->video_queue->length > 0) {
+    gst_buffer_unref (g_queue_pop_head (src->video_queue));
+  }
+
+  g_mutex_unlock (&src->video_lock);
+
+  /* Make sure all buffers have been returned to us */
+  g_mutex_lock (&src->pushed_video_frames_lock);
+
+  /* TODO: This is not good for final product */
+  g_assert (src->pushed_video_frames == 0);
+  g_mutex_unlock (&src->pushed_video_frames_lock);
+
+  /* Now we really stop. */
+  src->dev->ops->stop_recording (src->dev);
+
+  /* And finally: */
+  g_mutex_lock (&src->capturing_mutex);
+
+  src->capturing = FALSE;
+  g_object_notify (G_OBJECT (src), "ready-for-capture");
+
+  g_mutex_unlock (&src->capturing_mutex);
 }
 
 static void
@@ -1287,7 +1327,7 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
   g_mutex_unlock (&src->video_capture_status_lock);
 
   if (drop_buffer) {
-    GST_DEBUG_OBJECT (src, "video recording is not running. Dropping buffer %p",
+    GST_DEBUG_OBJECT (src, "video recording is stopping. Dropping buffer %p",
         video_data);
     src->dev->ops->release_recording_frame (src->dev, video_data);
     return;
