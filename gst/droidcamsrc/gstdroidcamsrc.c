@@ -39,8 +39,9 @@
 #include "gstimgsrcpad.h"
 #include "gstvidsrcpad.h"
 
-#define DEFAULT_CAMERA_DEVICE 0
-#define DEFAULT_MODE          MODE_IMAGE
+#define DEFAULT_CAMERA_DEVICE      0
+#define DEFAULT_MODE               MODE_IMAGE
+#define DEFAULT_VIDEO_METADATA     TRUE
 
 GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
@@ -137,6 +138,7 @@ enum
   PROP_CAMERA_DEVICE,
   PROP_MODE,
   PROP_READY_FOR_CAPTURE,
+  PROP_VIDEO_METADATA,
   N_PROPS,
 };
 
@@ -217,6 +219,11 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
           "Element is ready for starting another capture",
           TRUE, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_VIDEO_METADATA,
+      g_param_spec_boolean ("video-metadata", "Video metadata",
+          "Set output mode for video data",
+          DEFAULT_VIDEO_METADATA, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
   droidcamsrc_signals[START_CAPTURE_SIGNAL] =
       g_signal_new_class_handler ("start-capture",
       G_TYPE_FROM_CLASS (klass),
@@ -244,6 +251,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->cam_dev = NULL;
   src->camera_device = DEFAULT_CAMERA_DEVICE;
   src->mode = DEFAULT_MODE;
+  src->video_metadata = DEFAULT_VIDEO_METADATA;
   src->pool = NULL;
   src->camera_params = NULL;
   src->events = NULL;
@@ -333,6 +341,10 @@ gst_droid_cam_src_get_property (GObject * object, guint prop_id,
       g_value_set_enum (value, src->mode);
       break;
 
+    case PROP_VIDEO_METADATA:
+      g_value_set_boolean (value, src->video_metadata);
+      break;
+
     case PROP_READY_FOR_CAPTURE:
       g_value_set_boolean (value, !src->capturing);
       break;
@@ -357,6 +369,10 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
     case PROP_MODE:
       src->mode = g_value_get_enum (value);
       gst_droid_cam_src_set_recording_hint (src, TRUE);
+      break;
+
+    case PROP_VIDEO_METADATA:
+      src->video_metadata = g_value_get_boolean (value);
       break;
 
     default:
@@ -1030,7 +1046,10 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
     return FALSE;
   }
 
-  err = src->dev->ops->store_meta_data_in_buffers (src->dev, 1);
+  GST_DEBUG_OBJECT (src, "setting metadata storage in video buffers to %i",
+      src->video_metadata);
+  err =
+      src->dev->ops->store_meta_data_in_buffers (src->dev, src->video_metadata);
   if (err != 0) {
     GST_WARNING_OBJECT (src,
         "failed to enable meta data storage in video buffers: %d", err);

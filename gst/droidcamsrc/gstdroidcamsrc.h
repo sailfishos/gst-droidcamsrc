@@ -80,6 +80,7 @@ struct _GstDroidCamSrc {
 
   gint camera_device;
   gint mode;
+  gboolean video_metadata;
 
   GList *events;
 
