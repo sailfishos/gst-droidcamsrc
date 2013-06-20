@@ -222,7 +222,7 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
   g_object_class_install_property (gobject_class, PROP_VIDEO_METADATA,
       g_param_spec_boolean ("video-metadata", "Video metadata",
           "Set output mode for video data",
-          DEFAULT_VIDEO_METADATA, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+          DEFAULT_VIDEO_METADATA, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   droidcamsrc_signals[START_CAPTURE_SIGNAL] =
       g_signal_new_class_handler ("start-capture",
