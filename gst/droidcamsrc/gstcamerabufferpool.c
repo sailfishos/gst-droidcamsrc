@@ -148,7 +148,7 @@ gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
     return FALSE;
   }
 
-  buffer = gst_native_buffer_new (handle, pool->gralloc, stride);
+  buffer = gst_native_buffer_new (handle, pool->gralloc, stride, pool->usage);
   GST_DEBUG_OBJECT (pool, "Allocated buffer %p", buffer);
 
   caps = gst_caps_new_simple (GST_NATIVE_BUFFER_NAME,
