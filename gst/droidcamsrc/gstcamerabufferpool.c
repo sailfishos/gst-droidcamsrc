@@ -154,7 +154,8 @@ gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
   caps = gst_caps_new_simple (GST_NATIVE_BUFFER_NAME,
       "width", G_TYPE_INT, pool->width,
       "height", G_TYPE_INT, pool->height,
-      "framerate", GST_TYPE_FRACTION, pool->fps_n, pool->fps_d, NULL);
+      "framerate", GST_TYPE_FRACTION, pool->fps_n, pool->fps_d,
+      "format", G_TYPE_INT, pool->format, NULL);
 
   GST_DEBUG_OBJECT (pool, "setting buffer caps to %" GST_PTR_FORMAT, caps);
 
