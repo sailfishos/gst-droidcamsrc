@@ -137,5 +137,13 @@ main (int argc, char *argv[])
   g_main_loop_run (test->loop);
   gst_element_set_state (test->bin, GST_STATE_NULL);
 
+  gst_object_unref (test->bin);
+
+  g_main_loop_unref (test->loop);
+
+  g_free (test);
+
+  gst_deinit ();
+
   return 0;
 }
