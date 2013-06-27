@@ -813,6 +813,7 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
 
   src->dev->ops->enable_msg_type (src->dev, CAMERA_MSG_ALL_MSGS);
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_PREVIEW_FRAME);
+  src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_RAW_IMAGE);
 
   err = src->dev->ops->start_preview (src->dev);
   if (err != 0) {
