@@ -17,10 +17,16 @@
  * Boston, MA 02111-1307, USA.
  */
 
+#include <stdlib.h>
+#include <getopt.h>
+#include <string.h>
 #include <gst/gst.h>
 #include <assert.h>
 #include <gst/pbutils/encoding-profile.h>
 #include <gst/pbutils/encoding-target.h>
+
+#define MODE_IMAGE          1
+#define MODE_VIDEO          2
 
 typedef struct
 {
@@ -28,7 +34,26 @@ typedef struct
   GstElement *src;
   GstElement *sink;
   GMainLoop *loop;
+  int timeout;
+  int images;
+  int videos;
 } Test;
+
+static gboolean
+start_image_capture (Test * test)
+{
+  if (!test->images) {
+    g_print ("No more images. Quitting!\n");
+    g_main_loop_quit (test->loop);
+    return FALSE;
+  }
+
+  --test->images;
+  g_print ("Starting image capture\n");
+  g_signal_emit_by_name (test->bin, "start-capture", NULL);
+
+  return FALSE;
+}
 
 static gboolean
 bus_call (GstBus * bus, GstMessage * msg, gpointer data)
@@ -36,6 +61,20 @@ bus_call (GstBus * bus, GstMessage * msg, gpointer data)
   Test *test = (Test *) data;
 
   switch (GST_MESSAGE_TYPE (msg)) {
+    case GST_MESSAGE_ELEMENT:{
+      if (GST_MESSAGE_SRC (msg) == GST_OBJECT (test->bin)) {
+        const GstStructure *structure = gst_message_get_structure (msg);
+        if (gst_structure_has_name (structure, "image-done")) {
+          const gchar *fname = gst_structure_get_string (structure, "filename");
+          g_print ("captured image %s\n", fname);
+        }
+
+        g_timeout_add (1000, (GSourceFunc) start_image_capture, test);
+      }
+
+      break;
+    }
+
     case GST_MESSAGE_ERROR:{
       gchar *debug;
       GError *error;
@@ -99,12 +138,85 @@ video_profile ()
   return profile;
 }
 
+static gboolean
+parse_options (int argc, char *argv[], Test * test)
+{
+  int opt;
+  static struct option options[] = {
+    {"timeout", required_argument, 0, 0},
+    {"image", required_argument, 0, 0},
+    {"video", required_argument, 0, 0},
+    {"help", no_argument, 0, 0},
+    {0, 0, 0, 0}
+  };
+
+  while (1) {
+    opt = getopt_long (argc, argv, "t:i:v:h", options, NULL);
+    if (opt == -1) {
+      break;
+    }
+
+    switch (opt) {
+      case 't':
+        test->timeout = atoi (optarg);
+        break;
+
+      case 'i':
+        test->images = atoi (optarg);
+        break;
+
+      case 'v':
+        test->videos = atoi (optarg);
+        break;
+
+      case '?':
+        exit (1);
+
+      case 'h':
+        g_print
+            ("Usage: %s [--image <number of images] [--video <number of videos>]\n",
+            argv[0]);
+        exit (0);
+
+      default:
+        g_printerr ("unknown option 0%o\n", opt);
+        break;
+    }
+  }
+
+  if (test->videos && test->images) {
+    g_printerr ("Cannot do both images and videos\n");
+    return FALSE;
+  }
+
+  if (test->timeout <= 0) {
+    g_printerr ("Timeout must be greater than 0\n");
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static gboolean
+start_video_capture (Test * test)
+{
+  // TODO:
+  return FALSE;
+}
+
 int
 main (int argc, char *argv[])
 {
+  Test *test = g_malloc (sizeof (Test));
+  memset (test, 0x0, sizeof (Test));
+  test->timeout = 2;
+
+  if (!parse_options (argc, argv, test)) {
+    return 1;
+  }
+
   gst_init (&argc, &argv);
 
-  Test *test = g_malloc (sizeof (Test));
   test->loop = g_main_loop_new (NULL, FALSE);
 
   test->src = gst_element_factory_make ("droidcamsrc", NULL);
@@ -121,6 +233,16 @@ main (int argc, char *argv[])
       test->sink, "flags", 0x00000001 | 0x00000002 | 0x00000004 | 0x00000008,
       "video-profile", video, NULL);
 
+  if (test->videos) {
+    g_object_set (test->bin, "mode", MODE_VIDEO, NULL);
+    g_print ("Setting mode to video\n");
+  } else if (test->images) {
+    g_print ("Setting mode to image\n");
+    g_object_set (test->bin, "mode", MODE_IMAGE, NULL);
+  } else {
+    g_print ("Not setting mode\n");
+  }
+
   GstBus *bus = gst_pipeline_get_bus (GST_PIPELINE (test->bin));
   gst_bus_add_watch (bus, bus_call, test);
   gst_object_unref (bus);
@@ -132,7 +254,19 @@ main (int argc, char *argv[])
     return 1;
   }
 
-  g_timeout_add (5000, (GSourceFunc) g_main_loop_quit, test->loop);
+  if (test->images) {
+    g_object_set (test->bin, "location", "cap_%d.jpg", NULL);
+    g_timeout_add (test->timeout * 1000, (GSourceFunc) start_image_capture,
+        test);
+  } else if (test->videos) {
+    g_object_set (test->bin, "location", "cap_%d.mp4", NULL);
+    g_timeout_add (test->timeout * 1000, (GSourceFunc) start_video_capture,
+        test);
+  } else {
+    g_print ("Setting pipeline timeout to %i seconds\n", test->timeout);
+    g_timeout_add (test->timeout * 1000, (GSourceFunc) g_main_loop_quit,
+        test->loop);
+  }
 
   g_main_loop_run (test->loop);
   gst_element_set_state (test->bin, GST_STATE_NULL);
