@@ -56,6 +56,32 @@ start_image_capture (Test * test)
 }
 
 static gboolean
+stop_video_capture (Test * test)
+{
+  g_signal_emit_by_name (test->bin, "stop-capture", NULL);
+
+  return FALSE;
+}
+
+static gboolean
+start_video_capture (Test * test)
+{
+  if (!test->videos) {
+    g_print ("No more videos. Quitting!\n");
+    g_main_loop_quit (test->loop);
+    return FALSE;
+  }
+
+  --test->videos;
+  g_print ("Starting video capture\n");
+  g_signal_emit_by_name (test->bin, "start-capture", NULL);
+
+  g_timeout_add (test->timeout * 1000, (GSourceFunc) stop_video_capture, test);
+
+  return FALSE;
+}
+
+static gboolean
 bus_call (GstBus * bus, GstMessage * msg, gpointer data)
 {
   Test *test = (Test *) data;
@@ -67,9 +93,10 @@ bus_call (GstBus * bus, GstMessage * msg, gpointer data)
         if (gst_structure_has_name (structure, "image-done")) {
           const gchar *fname = gst_structure_get_string (structure, "filename");
           g_print ("captured image %s\n", fname);
+          g_timeout_add (1000, (GSourceFunc) start_image_capture, test);
+        } else {
+          g_timeout_add (1000, (GSourceFunc) start_video_capture, test);
         }
-
-        g_timeout_add (1000, (GSourceFunc) start_image_capture, test);
       }
 
       break;
@@ -197,13 +224,6 @@ parse_options (int argc, char *argv[], Test * test)
   return TRUE;
 }
 
-static gboolean
-start_video_capture (Test * test)
-{
-  // TODO:
-  return FALSE;
-}
-
 int
 main (int argc, char *argv[])
 {
@@ -260,8 +280,7 @@ main (int argc, char *argv[])
         test);
   } else if (test->videos) {
     g_object_set (test->bin, "location", "cap_%d.mp4", NULL);
-    g_timeout_add (test->timeout * 1000, (GSourceFunc) start_video_capture,
-        test);
+    g_timeout_add (1000, (GSourceFunc) start_video_capture, test);
   } else {
     g_print ("Setting pipeline timeout to %i seconds\n", test->timeout);
     g_timeout_add (test->timeout * 1000, (GSourceFunc) g_main_loop_quit,
