@@ -251,6 +251,7 @@ push_buffer:
 
   klass->update_segment (src, buffer);
 
+  GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DISCONT);
   ret = gst_pad_push (src->imgsrc, buffer);
 
   if (!gst_pad_push_event (src->imgsrc, gst_event_new_eos ())) {
