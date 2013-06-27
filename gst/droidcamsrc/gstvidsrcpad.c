@@ -322,13 +322,6 @@ push_buffer:
 
 stop_recording:
   GST_DEBUG_OBJECT (src, "stopping video recording");
-  if (!gst_pad_push_event (src->vidsrc, gst_event_new_flush_start ())) {
-    GST_WARNING_OBJECT (src, "failed to send FLUSH_START to video branch");
-  }
-
-  if (!gst_pad_push_event (src->vidsrc, gst_event_new_flush_stop ())) {
-    GST_WARNING_OBJECT (src, "failed to send FLUSH_STOP to video branch");
-  }
 
   GST_DEBUG_OBJECT (src, "performing EOS on video branch");
   if (!gst_pad_push_event (src->vidsrc, gst_event_new_eos ())) {
