@@ -58,6 +58,7 @@ start_image_capture (Test * test)
 static gboolean
 stop_video_capture (Test * test)
 {
+  g_print ("Stopping video capture\n");
   g_signal_emit_by_name (test->bin, "stop-capture", NULL);
 
   return FALSE;
