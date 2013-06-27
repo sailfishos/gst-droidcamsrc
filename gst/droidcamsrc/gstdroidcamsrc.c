@@ -1153,8 +1153,12 @@ gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
   /* Make sure all buffers have been returned to us */
   g_mutex_lock (&src->pushed_video_frames_lock);
 
-  /* TODO: This is not good for final product */
-  g_assert (src->pushed_video_frames == 0);
+  while (src->pushed_video_frames > 0) {
+    GST_DEBUG_OBJECT (src, "Waiting for pushed_video_frames to reach 0");
+    g_cond_wait (&src->pushed_video_frames_cond,
+        &src->pushed_video_frames_lock);
+  }
+
   g_mutex_unlock (&src->pushed_video_frames_lock);
 
   /* Now we really stop. */
