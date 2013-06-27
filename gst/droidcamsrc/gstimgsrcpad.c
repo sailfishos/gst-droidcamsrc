@@ -245,6 +245,7 @@ gst_droid_cam_src_imgsrc_loop (gpointer data)
   g_mutex_unlock (&src->img_lock);
 
 push_buffer:
+  /* TODO: Do we need a new segment each time? */
   if (!klass->open_segment (src, src->imgsrc)) {
     GST_WARNING_OBJECT (src, "failed to push new segment");
   }
@@ -253,10 +254,6 @@ push_buffer:
 
   GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DISCONT);
   ret = gst_pad_push (src->imgsrc, buffer);
-
-  if (!gst_pad_push_event (src->imgsrc, gst_event_new_eos ())) {
-    GST_WARNING_OBJECT (src, "failed to push EOS");
-  }
 
   if (ret == GST_FLOW_UNEXPECTED) {
     /* Nothing */
