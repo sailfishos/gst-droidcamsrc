@@ -1138,6 +1138,9 @@ gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
   g_cond_wait (&src->video_capture_status_cond,
       &src->video_capture_status_lock);
 
+  GST_LOG_OBJECT (src, "video_capture_status is now %i",
+      src->video_capture_status);
+
   g_assert (src->video_capture_status == VIDEO_CAPTURE_STOPPED);
 
   g_mutex_unlock (&src->video_capture_status_lock);
@@ -1165,6 +1168,8 @@ gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
 
   /* Now we really stop. */
   src->dev->ops->stop_recording (src->dev);
+
+  GST_LOG_OBJECT (src, "HAL stopped recording");
 
   /* And finally: */
   g_mutex_lock (&src->capturing_mutex);
