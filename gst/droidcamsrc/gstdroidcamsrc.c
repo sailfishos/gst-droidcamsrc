@@ -1154,6 +1154,8 @@ gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
   g_mutex_lock (&src->pushed_video_frames_lock);
 
   while (src->pushed_video_frames > 0) {
+    GST_LOG_OBJECT (src, "pushed video frames is now %i",
+        src->pushed_video_frames);
     GST_DEBUG_OBJECT (src, "Waiting for pushed_video_frames to reach 0");
     g_cond_wait (&src->pushed_video_frames_cond,
         &src->pushed_video_frames_lock);
@@ -1361,6 +1363,8 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
 
   g_mutex_lock (&src->pushed_video_frames_lock);
   ++src->pushed_video_frames;
+  GST_LOG_OBJECT (src, "pushed video frames is now %i",
+      src->pushed_video_frames);
   g_mutex_unlock (&src->pushed_video_frames_lock);
 
   buff = gst_buffer_new ();
@@ -1457,6 +1461,8 @@ gst_droid_cam_src_free_video_buffer (gpointer data)
 
   g_mutex_lock (&src->pushed_video_frames_lock);
   --src->pushed_video_frames;
+  GST_LOG_OBJECT (src, "pushed video frames is now %i",
+      src->pushed_video_frames);
   g_cond_signal (&src->pushed_video_frames_cond);
 
   g_mutex_unlock (&src->pushed_video_frames_lock);

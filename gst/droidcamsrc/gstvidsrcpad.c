@@ -234,6 +234,8 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   }
 
   g_mutex_lock (&src->video_capture_status_lock);
+  GST_LOG_OBJECT (src, "video capture status %d", src->video_capture_status);
+
   switch (src->video_capture_status) {
     case VIDEO_CAPTURE_STARTING:
       send_new_segment = TRUE;
@@ -257,7 +259,7 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   g_mutex_unlock (&src->video_capture_status_lock);
 
   if (not_recording) {
-    GST_LOG_OBJECT (src, "Returning. Recording not running.");
+    GST_LOG_OBJECT (src, "Recording not running.");
   }
 
   if (stop_recording) {
