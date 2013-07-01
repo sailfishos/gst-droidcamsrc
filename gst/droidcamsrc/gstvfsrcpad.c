@@ -325,7 +325,6 @@ push_buffer:
   gst_camera_buffer_pool_unref (src->pool);
   if (G_UNLIKELY (src->send_new_segment)) {
     GST_DEBUG_OBJECT (src, "sending new segment event");
-    src->send_new_segment = FALSE;
 
     if (!klass->open_segment (src, src->vfsrc)) {
       GST_WARNING_OBJECT (src, "failed to push new segment");
@@ -352,6 +351,24 @@ push_buffer:
   g_list_free (events);
 
   klass->update_segment (src, GST_BUFFER (buff));
+  if (G_UNLIKELY (src->send_new_segment)) {
+    src->send_new_segment = FALSE;
+    /*
+     * If we send a NEWSEGMENT event and then push the first buffer downstream.
+     * What happens is that the sink blocks waiting for clock synchronization.
+     * The real issue is that the base_time of our element will be different
+     * than the base_time the sink element. This discrepancy remains until the sink receives
+     * the first buffer after the NEWSEGMENT, prerolls and gets to playing state.
+     * Then our base_time will be updated.
+     * This will stall the pipeline for a while until the update happens.
+     * We are thus resetting the buffer timestamp to 0 here.
+     * When we initially start pushing the first buffer this should be as close as
+     * possible to the real timestamp and should not be an issue.
+     * When we send the first buffer after flushing then this buffer will hopefully
+     * be late enough and gets dropped without stalling the pipeline.
+     */
+    GST_BUFFER_TIMESTAMP (buff) = 0;
+  }
 
   GST_LOG_OBJECT (src, "pushing buffer %" GST_PTR_FORMAT, buff);
   ret = gst_pad_push (pad, GST_BUFFER (buff));

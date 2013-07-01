@@ -935,6 +935,9 @@ gst_droid_cam_src_flush_buffers (GstDroidCamSrc * src)
 
   gst_pad_stop_task (src->vfsrc);
 
+  /* We will have to send a new segment event */
+  src->send_new_segment = TRUE;
+
   /* clear any pending events */
   GST_OBJECT_LOCK (src);
   g_list_free_full (src->events, (GDestroyNotify) gst_event_unref);
@@ -964,53 +967,11 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
 
     src->image_renegotiate = FALSE;
   }
-  // First we need to flush the viewfinder branch of the pipeline:
+
+  /* First we need to flush the viewfinder branch of the pipeline: */
   if (!gst_droid_cam_src_flush_buffers (src)) {
     return FALSE;
   }
-#if 0
-  /* unlock our pad */
-  GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
-  src->pool->flushing = TRUE;
-  GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
-
-  gst_camera_buffer_pool_unlock_app_queue (src->pool);
-  /* task has been paused by now */
-
-  if (!gst_pad_push_event (src->vfsrc, gst_event_new_flush_start ())) {
-    GST_WARNING_OBJECT (src, "failed to push flush start event");
-  }
-
-  GST_PAD_STREAM_LOCK (src->vfsrc);
-
-  if (!gst_pad_push_event (src->vfsrc, gst_event_new_flush_stop ())) {
-    GST_WARNING_OBJECT (src, "failed to push flush stop event");
-  }
-
-  GST_PAD_STREAM_UNLOCK (src->vfsrc);
-
-  gst_pad_stop_task (src->vfsrc);
-
-#if 0
-  /* TODO: We cannot send a new segment here.
-   * If we send a NEWSEGMENT event and then push the first buffer downstream.
-   * What happens is that the sink blocks waiting for clock synchronization.
-   * The real issue is the base_time of our element will be different
-   * than the base_time the sink element. This discrepancy remains until the sink receives
-   * the first buffer after the NEWSEGMENT, prerolls and gets to playing state.
-   * Then out base_time will be updated.
-   * This will stall the pipeline for a while until the update happens.
-   */
-  /* We will have to send a new segment event */
-  src->send_new_segment = TRUE;
-#endif
-
-  /* clear any pending events */
-  GST_OBJECT_LOCK (src);
-  g_list_free_full (src->events, (GDestroyNotify) gst_event_unref);
-  src->events = NULL;
-  GST_OBJECT_UNLOCK (src);
-#endif
 
   /* start actual capturing */
   err = src->dev->ops->take_picture (src->dev);
@@ -1042,7 +1003,8 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
 
     src->video_renegotiate = FALSE;
   }
-  // First we need to flush the viewfinder branch of the pipeline:
+
+  /* First we need to flush the viewfinder branch of the pipeline: */
   if (!gst_droid_cam_src_flush_buffers (src)) {
     return FALSE;
   }
