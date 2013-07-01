@@ -1447,6 +1447,8 @@ gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src, gboolean apply)
 
   GST_OBJECT_UNLOCK (src);
 
+  GST_DEBUG_OBJECT (src, "camera mode %d", src->mode);
+
   if (apply) {
     gst_droid_cam_src_set_camera_params (src);
   }
