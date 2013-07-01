@@ -454,9 +454,11 @@ gst_camera_buffer_pool_set_buffer_metadata (GstCameraBufferPool * pool,
   if (!pool->last_timestamp) {
     GstClock *clock;
     GstClockTime timestamp;
+    GstClockTime base_time;
 
     GST_OBJECT_LOCK (pool->src);
     clock = GST_ELEMENT_CLOCK (pool->src);
+    base_time = pool->src->base_time;
 
     if (clock) {
       timestamp = gst_clock_get_time (clock) - pool->src->base_time;
@@ -474,6 +476,9 @@ gst_camera_buffer_pool_set_buffer_metadata (GstCameraBufferPool * pool,
 
     GST_LOG_OBJECT (pool, "buffer timestamp set to %" GST_TIME_FORMAT,
         GST_TIME_ARGS (timestamp));
+
+    GST_LOG_OBJECT (pool, "base time is now %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (base_time));
   }
 
   GST_BUFFER_DURATION (buff) = pool->buffer_duration;
