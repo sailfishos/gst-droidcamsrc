@@ -97,7 +97,8 @@ static gboolean
 gst_camera_buffer_pool_free_buffer (void *data, GstNativeBuffer * buffer)
 {
   /* Don't touch data. Likely to be garbage. */
-  gst_gralloc_free (buffer->gralloc, buffer->handle);
+  gst_gralloc_free (gst_native_buffer_get_gralloc (buffer),
+      *gst_native_buffer_get_handle (buffer));
 
   return FALSE;                 /* free buffer finally */
 }
@@ -148,7 +149,9 @@ gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
     return FALSE;
   }
 
-  buffer = gst_native_buffer_new (handle, pool->gralloc, stride, pool->usage);
+  buffer =
+      gst_native_buffer_new (handle, pool->gralloc, pool->width, pool->height,
+      stride, pool->usage, pool->format);
   GST_DEBUG_OBJECT (pool, "Allocated buffer %p", buffer);
 
   caps = gst_caps_new_simple (GST_NATIVE_BUFFER_NAME,
@@ -162,8 +165,8 @@ gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
   gst_buffer_set_caps (GST_BUFFER (buffer), caps);
   gst_caps_unref (caps);
 
-  buffer->finalize_callback = gst_camera_buffer_pool_resurrect_buffer;
-  buffer->finalize_callback_data = pool;
+  gst_native_buffer_set_finalize_callback (buffer,
+      gst_camera_buffer_pool_resurrect_buffer, pool);
 
   g_ptr_array_add (pool->buffers, buffer);
 
@@ -187,7 +190,7 @@ gst_camera_buffer_pool_get (const struct preview_stream_ops *ops)
 static GstNativeBuffer *
 gst_camera_buffer_pool_get_buffer (buffer_handle_t * buffer)
 {
-  return container_of (buffer, GstNativeBuffer, handle);
+  return gst_native_buffer_find (buffer);
 }
 
 static int
@@ -421,8 +424,8 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
     return -EINVAL;
   }
 
-  *stride = buff->stride;
-  *buffer = &buff->handle;
+  *stride = gst_native_buffer_get_stride (buff);
+  *buffer = gst_native_buffer_get_handle (buff);
 
   GST_DEBUG_OBJECT (pool, "dequeueing buffer %p", buff);
 
@@ -633,8 +636,10 @@ gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
     GstNativeBuffer *buffer = g_ptr_array_index (pool->buffers, 0);
     GST_DEBUG_OBJECT (pool, "free buffer %p", buffer);
 
-    /* We will not free the buffer for now. It will be freed whenever its reference count drops to 0 */
-    buffer->finalize_callback = gst_camera_buffer_pool_free_buffer;
+    /* We will not free the buffer for now.
+     * It will be freed whenever its reference count drops to 0 */
+    gst_native_buffer_set_finalize_callback (buffer,
+        gst_camera_buffer_pool_free_buffer, pool);
 
     g_ptr_array_remove (pool->buffers, buffer);
 
