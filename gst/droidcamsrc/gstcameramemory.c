@@ -24,6 +24,7 @@
 #include "gstcameramemory.h"
 #include <glib.h>
 #include <sys/mman.h>
+#include <stdio.h>              /* perror() */
 
 typedef struct
 {
