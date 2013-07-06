@@ -21,7 +21,7 @@
 #define __GST_CAMERA_MEMORY_H__
 
 #include <glib.h>
-#include "android/camera.h"
+#include <hardware/camera.h>
 
 G_BEGIN_DECLS
 

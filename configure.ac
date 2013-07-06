@@ -41,6 +41,17 @@ PKG_CHECK_MODULES(GST, [
   ])
 ])
 
+PKG_CHECK_MODULES(DROID, [
+  android-headers
+], [
+  AC_SUBST(DROID_CFLAGS)
+  AC_SUBST(DROID_LIBS)
+], [
+  AC_MSG_ERROR([
+      android-headers package is missing
+  ])
+])
+
 dnl check if compiler understands -Wall (if yes, add -Wall to GST_CFLAGS)
 AC_MSG_CHECKING([to see if compiler understands -Wall])
 save_CFLAGS="$CFLAGS"

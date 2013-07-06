@@ -22,7 +22,7 @@
 
 #include <gst/gst.h>
 #include <gst/gstminiobject.h>
-#include "android/camera.h"
+#include <hardware/camera.h>
 #include <gst/gstgralloc.h>
 
 
