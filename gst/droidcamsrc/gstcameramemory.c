@@ -25,6 +25,7 @@
 #include <glib.h>
 #include <sys/mman.h>
 #include <stdio.h>              /* perror() */
+#include <unistd.h>             /* getpagesize() */
 
 typedef struct
 {
@@ -45,11 +46,15 @@ gst_camera_memory_get (int fd, size_t buf_size, unsigned int num_bufs,
 {
   GstCameraMemory *mem = g_slice_new0 (GstCameraMemory);
   gboolean res;
+  size_t size = buf_size * num_bufs;
+  const size_t pagesize = getpagesize ();
+  size = ((size + pagesize - 1) & ~(pagesize - 1));
+
   mem->fd = fd;
   mem->buf_size = buf_size;
   mem->num_bufs = num_bufs;
   mem->data = data;
-  mem->mem.size = buf_size * num_bufs;
+  mem->mem.size = size;
   mem->mem.handle = mem;
   mem->mem.release = gst_camera_memory_release;
 
