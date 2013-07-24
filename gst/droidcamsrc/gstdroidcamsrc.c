@@ -122,6 +122,9 @@ static void gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
     int32_t msg_type, const camera_memory_t * data, unsigned int index,
     void *user);
 
+static void gst_droid_cam_src_notify_callback (int32_t msg_type,
+    int32_t ext1, int32_t ext2, void *user);
+
 static void gst_droid_cam_src_handle_compressed_image (GstDroidCamSrc * src,
     const camera_memory_t * mem, unsigned int index,
     camera_frame_metadata_t * metadata);
@@ -131,6 +134,8 @@ static gboolean gst_droid_cam_src_finish_capture (GstDroidCamSrc * src);
 static void gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src,
     gboolean apply);
 static void gst_droid_cam_src_free_video_buffer (gpointer data);
+static void gst_droid_cam_src_send_capture_start (GstDroidCamSrc * src);
+static void gst_droid_cam_src_send_capture_end (GstDroidCamSrc * src);
 
 enum
 {
@@ -510,8 +515,7 @@ gst_droid_cam_src_set_callbacks (GstDroidCamSrc * src)
 
   GST_DEBUG_OBJECT (src, "set callbacks");
 
-  /* TODO: Complete this when we know what we need */
-  src->dev->ops->set_callbacks (src->dev, NULL, // notify_cb
+  src->dev->ops->set_callbacks (src->dev, gst_droid_cam_src_notify_callback,
       gst_droid_cam_src_data_callback,
       gst_droid_cam_src_data_timestamp_callback, gst_camera_memory_get, src);
 
@@ -814,6 +818,7 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
   src->dev->ops->enable_msg_type (src->dev, CAMERA_MSG_ALL_MSGS);
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_PREVIEW_FRAME);
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_RAW_IMAGE);
+  src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_RAW_IMAGE_NOTIFY);
 
   err = src->dev->ops->start_preview (src->dev);
   if (err != 0) {
@@ -972,6 +977,13 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
   if (!gst_droid_cam_src_flush_buffers (src)) {
     return FALSE;
   }
+
+  /* enable shutter message */
+  src->dev->ops->enable_msg_type (src->dev, CAMERA_MSG_SHUTTER);
+
+  /* reset those */
+  src->capture_start_sent = FALSE;
+  src->capture_end_sent = FALSE;
 
   /* start actual capturing */
   err = src->dev->ops->take_picture (src->dev);
@@ -1274,9 +1286,9 @@ gst_droid_cam_src_data_callback (int32_t msg_type, const camera_memory_t * mem,
   GstDroidCamSrc *src = (GstDroidCamSrc *) user_data;
 
   GST_DEBUG_OBJECT (src, "data callback");
-
   switch (msg_type) {
     case CAMERA_MSG_COMPRESSED_IMAGE:
+      gst_droid_cam_src_send_capture_end (src);
       gst_droid_cam_src_handle_compressed_image (src, mem, index, metadata);
       break;
 
@@ -1381,6 +1393,29 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
 }
 
 static void
+gst_droid_cam_src_notify_callback (int32_t msg_type,
+    int32_t ext1, int32_t ext2, void *user)
+{
+  GstDroidCamSrc *src;
+
+  src = (GstDroidCamSrc *) user;
+
+  GST_DEBUG_OBJECT (src, "notify callback: 0x%x, %i, %i", msg_type, ext1, ext2);
+
+  /* TODO: more messages and error messages */
+  switch (msg_type) {
+    case CAMERA_MSG_SHUTTER:
+      src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_SHUTTER);
+      gst_droid_cam_src_send_capture_start (src);
+      break;
+
+    default:
+      GST_WARNING_OBJECT (src, "unknown message 0x%x", msg_type);
+      break;
+  }
+}
+
+static void
 gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src, gboolean apply)
 {
   GST_DEBUG_OBJECT (src, "set recording hint");
@@ -1437,4 +1472,60 @@ gst_droid_cam_src_free_video_buffer (gpointer data)
   g_mutex_unlock (&src->pushed_video_frames_lock);
 
   g_slice_free (GstDroidCamSrcVideoBufferData, data);
+}
+
+static void
+gst_droid_cam_src_send_capture_start (GstDroidCamSrc * src)
+{
+  GstStructure *s;
+  GstMessage *msg;
+
+  if (src->capture_start_sent) {
+    GST_DEBUG_OBJECT (src, "%s message already sent",
+        GST_DROID_CAM_SRC_CAPTURE_START);
+    return;
+  }
+
+  GST_DEBUG_OBJECT (src, "Sending %s message", GST_DROID_CAM_SRC_CAPTURE_START);
+
+  s = gst_structure_new (GST_DROID_CAM_SRC_CAPTURE_START, NULL);
+  msg = gst_message_new_element (GST_OBJECT (src), s);
+
+  if (!gst_element_post_message (GST_ELEMENT (src), msg)) {
+    GST_WARNING_OBJECT (src,
+        "This element has no bus, therefore no message sent!");
+  }
+
+  GST_LOG_OBJECT (src, "%s message sent", GST_DROID_CAM_SRC_CAPTURE_START);
+
+
+  src->capture_start_sent = TRUE;
+}
+
+static void
+gst_droid_cam_src_send_capture_end (GstDroidCamSrc * src)
+{
+  GstStructure *s;
+  GstMessage *msg;
+
+  if (src->capture_end_sent) {
+    GST_DEBUG_OBJECT (src, "%s message already sent",
+        GST_DROID_CAM_SRC_CAPTURE_END);
+    return;
+  }
+
+  GST_DEBUG_OBJECT (src, "Sending %s message", GST_DROID_CAM_SRC_CAPTURE_END);
+
+  s = gst_structure_new (GST_DROID_CAM_SRC_CAPTURE_END, NULL);
+  msg = gst_message_new_element (GST_OBJECT (src), s);
+
+  if (!gst_element_post_message (GST_ELEMENT (src), msg)) {
+    GST_WARNING_OBJECT (src,
+        "This element has no bus, therefore no message sent!");
+  }
+
+  GST_LOG_OBJECT (src, "%s message sent", GST_DROID_CAM_SRC_CAPTURE_END);
+
+
+  src->capture_end_sent = TRUE;
 }

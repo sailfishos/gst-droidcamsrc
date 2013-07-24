@@ -61,6 +61,9 @@ G_BEGIN_DECLS
 #define VIDEO_CAPTURE_STOPPED           3
 #define VIDEO_CAPTURE_DONE              4
 
+#define GST_DROID_CAM_SRC_CAPTURE_START "photo-capture-start"
+#define GST_DROID_CAM_SRC_CAPTURE_END "photo-capture-end"
+
 typedef struct _GstDroidCamSrc GstDroidCamSrc;
 typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;
 
@@ -118,6 +121,9 @@ struct _GstDroidCamSrc {
   int video_capture_status;
 
   int num_video_frames;
+
+  gboolean capture_start_sent;
+  gboolean capture_end_sent;
 };
 
 struct _GstDroidCamSrcClass {
