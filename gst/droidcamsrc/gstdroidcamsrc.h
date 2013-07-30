@@ -124,6 +124,9 @@ struct _GstDroidCamSrc {
 
   gboolean capture_start_sent;
   gboolean capture_end_sent;
+
+  /* photography interface bits */
+
 };
 
 struct _GstDroidCamSrcClass {

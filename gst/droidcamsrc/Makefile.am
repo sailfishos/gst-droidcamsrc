@@ -8,7 +8,8 @@ libgstdroidcamsrc_la_SOURCES =  plugin.c \
 				enums.c \
 				gstvfsrcpad.c \
 				gstimgsrcpad.c \
-				gstvidsrcpad.c
+				gstvidsrcpad.c \
+				gstphotoiface.c
 
 libgstdroidcamsrc_la_CFLAGS = $(GST_CFLAGS) \
                               $(DROID_CFLAGS)
@@ -20,11 +21,12 @@ libgstdroidcamsrc_la_LIBADD = $(GST_LIBS) -lhardware -lgstgralloc -lgstnativebuf
 libgstdroidcamsrc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 libgstdroidcamsrc_la_LIBTOOLFLAGS = --tag=disable-static
 
-noinst_HEADERS =  gstdroidcamsrc.h \
+noinst_HEADERS = gstdroidcamsrc.h \
 		 gstcameramemory.h \
 		 gstcamerabufferpool.h \
 		 cameraparams.h \
 		 enums.h \
 		 gstvfsrcpad.h \
 		 gstimgsrcpad.h \
-		 gstvidsrcpad.h
+		 gstvidsrcpad.h \
+		 gstphotoiface.h

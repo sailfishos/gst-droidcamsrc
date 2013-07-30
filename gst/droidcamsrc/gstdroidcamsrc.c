@@ -38,6 +38,7 @@
 #include "gstvfsrcpad.h"
 #include "gstimgsrcpad.h"
 #include "gstvidsrcpad.h"
+#include "gstphotoiface.h"
 
 #define DEFAULT_CAMERA_DEVICE      0
 #define DEFAULT_MODE               MODE_IMAGE
@@ -45,12 +46,6 @@
 
 GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
-
-#define gst_droid_cam_src_debug_init(ignored_parameter)                                      \
-  GST_DEBUG_CATEGORY_INIT (droidcam_debug, "droidcam", 0, "Android camera source"); \
-
-GST_BOILERPLATE_FULL (GstDroidCamSrc, gst_droid_cam_src, GstBin,
-    GST_TYPE_BIN, gst_droid_cam_src_debug_init);
 
 static GstStaticPadTemplate vfsrc_template =
 GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME,
@@ -136,16 +131,10 @@ static void gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src,
 static void gst_droid_cam_src_free_video_buffer (gpointer data);
 static void gst_droid_cam_src_send_capture_start (GstDroidCamSrc * src);
 static void gst_droid_cam_src_send_capture_end (GstDroidCamSrc * src);
+static void gst_droid_cam_src_boilerplate_init (GType type);
 
-enum
-{
-  PROP_0,
-  PROP_CAMERA_DEVICE,
-  PROP_MODE,
-  PROP_READY_FOR_CAPTURE,
-  PROP_VIDEO_METADATA,
-  N_PROPS,
-};
+GST_BOILERPLATE_FULL (GstDroidCamSrc, gst_droid_cam_src, GstBin,
+    GST_TYPE_BIN, gst_droid_cam_src_boilerplate_init);
 
 enum
 {
@@ -163,6 +152,15 @@ typedef struct
   GstBuffer *buffer;
   GstDroidCamSrc *src;
 } GstDroidCamSrcVideoBufferData;
+
+static void
+gst_droid_cam_src_boilerplate_init (GType type)
+{
+  GST_DEBUG_CATEGORY_INIT (droidcam_debug, "droidcam", 0,
+      "Android camera source");
+
+  gst_photo_iface_init (type);
+}
 
 static void
 gst_droid_cam_src_base_init (gpointer gclass)
@@ -228,6 +226,8 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
       g_param_spec_boolean ("video-metadata", "Video metadata",
           "Set output mode for video data",
           DEFAULT_VIDEO_METADATA, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  gst_photo_iface_add_properties (gobject_class);
 
   droidcamsrc_signals[START_CAPTURE_SIGNAL] =
       g_signal_new_class_handler ("start-capture",
@@ -335,7 +335,13 @@ static void
 gst_droid_cam_src_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstDroidCamSrc *src = GST_DROID_CAM_SRC (object);
+  GstDroidCamSrc *src;
+
+  if (gst_photo_iface_get_property (object, prop_id, value, pspec)) {
+    return;
+  }
+
+  src = GST_DROID_CAM_SRC (object);
 
   switch (prop_id) {
     case PROP_CAMERA_DEVICE:
@@ -364,7 +370,13 @@ static void
 gst_droid_cam_src_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstDroidCamSrc *src = GST_DROID_CAM_SRC (object);
+  GstDroidCamSrc *src;
+
+  if (gst_photo_iface_set_property (object, prop_id, value, pspec)) {
+    return;
+  }
+
+  src = GST_DROID_CAM_SRC (object);
 
   switch (prop_id) {
     case PROP_CAMERA_DEVICE:
