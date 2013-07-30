@@ -342,12 +342,34 @@ camera_params_get_video_caps (struct camera_params *params)
 }
 
 void
-camera_params_set_video_size (struct camera_params *params, int width, int height)
+camera_params_set_video_size (struct camera_params *params, int width,
+    int height)
 {
   std::stringstream stream;
   stream << width << "x" << height;
 
   camera_params_set (params, "video-size", stream.str ().c_str ());
+}
+
+int
+camera_params_get_int (struct camera_params *params, const char *key)
+{
+  std::map < std::string, std::vector < std::string > >::iterator iter =
+      params->items.find (key);
+  if (iter->second.size () == 0) {
+    return 0;
+  }
+
+  return atoi (iter->second[0].c_str ());
+}
+
+void
+camera_params_set_int (struct camera_params *params, const char *key, int val)
+{
+  std::stringstream stream;
+  stream << val;
+
+  camera_params_set (params, key, stream.str ().c_str ());
 }
 
 G_END_DECLS;

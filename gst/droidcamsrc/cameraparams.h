@@ -39,6 +39,8 @@ void camera_params_set_capture_size (struct camera_params *params, int width, in
 void camera_params_set_viewfinder_fps (struct camera_params *params, int fps);
 GstCaps *camera_params_get_video_caps (struct camera_params *params);
 void camera_params_set_video_size (struct camera_params *params, int width, int height);
+int camera_params_get_int (struct camera_params *params, const char *key);
+void camera_params_set_int(struct camera_params *params, const char *key, int val);
 
 G_END_DECLS
 
