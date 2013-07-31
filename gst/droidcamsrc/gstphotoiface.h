@@ -21,6 +21,7 @@
 #define __GST_PHOTO_IFACE_H__
 
 #include <gst/gst.h>
+#include "gstdroidcamsrc.h"
 
 G_BEGIN_DECLS
 
@@ -33,6 +34,7 @@ enum
   PROP_VIDEO_METADATA,
 
   /* photography */
+  PROP_FLASH_MODE,
 
   /* end */
   N_PROPS,
@@ -40,9 +42,12 @@ enum
 
 void gst_photo_iface_init (GType type);
 void gst_photo_iface_add_properties (GObjectClass * gobject_class);
-gboolean gst_photo_iface_get_property (GObject * object, guint prop_id,
+void gst_photo_iface_init_settings (GstDroidCamSrc * src);
+void gst_photo_iface_settings_to_params (GstDroidCamSrc * src);
+
+gboolean gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,
 				       GValue * value, GParamSpec * pspec);
-gboolean gst_photo_iface_set_property (GObject * object, guint prop_id,
+gboolean gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
 				       const GValue * value, GParamSpec * pspec);
 
 G_END_DECLS

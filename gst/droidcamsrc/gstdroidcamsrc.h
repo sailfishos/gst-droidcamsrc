@@ -25,6 +25,11 @@
 #include <hardware/camera.h>
 #include "gst/gstgralloc.h"
 #include "gstcamerabufferpool.h"
+#ifndef GST_USE_UNSTABLE_API
+#define GST_USE_UNSTABLE_API
+#include <gst/interfaces/photography.h>
+#undef GST_USE_UNSTABLE_API
+#endif /* GST_USE_UNSTABLE_API */
 
 G_BEGIN_DECLS
 
@@ -126,7 +131,7 @@ struct _GstDroidCamSrc {
   gboolean capture_end_sent;
 
   /* photography interface bits */
-
+  GstPhotoSettings photo_settings;
 };
 
 struct _GstDroidCamSrcClass {

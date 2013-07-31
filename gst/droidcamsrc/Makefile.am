@@ -29,4 +29,5 @@ noinst_HEADERS = gstdroidcamsrc.h \
 		 gstvfsrcpad.h \
 		 gstimgsrcpad.h \
 		 gstvidsrcpad.h \
-		 gstphotoiface.h
+		 gstphotoiface.h \
+		 table.h

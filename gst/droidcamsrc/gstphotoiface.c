@@ -29,6 +29,7 @@
 #endif /* GST_USE_UNSTABLE_API */
 #include "gstdroidcamsrc.h"
 #include "cameraparams.h"
+#include "table.h"
 
 static void
 gst_photo_iface_implements_interface_init (GstImplementsInterfaceClass * klass);
@@ -37,6 +38,14 @@ gst_photo_iface_implements_iface_supported (GstImplementsInterface * iface,
     GType iface_type);
 static void gst_photo_iface_photo_interface_init (GstPhotographyInterface *
     iface);
+
+static gboolean gst_photo_iface_get_flash_mode (GstPhotography * photo,
+    GstFlashMode * flash);
+static gboolean gst_photo_iface_set_flash_mode (GstPhotography * photo,
+    GstFlashMode flash);
+static GstFlashMode _gst_photo_iface_get_flash_mode (GstDroidCamSrc * src);
+static gboolean _gst_photo_iface_set_flash_mode (GstDroidCamSrc * src,
+    GstFlashMode flash, gboolean commit);
 
 void
 gst_photo_iface_init (GType type)
@@ -75,33 +84,122 @@ gst_photo_iface_implements_iface_supported (GstImplementsInterface * iface,
 static void
 gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
 {
-  // TODO:
+  iface->get_flash_mode = gst_photo_iface_get_flash_mode;
+  iface->set_flash_mode = gst_photo_iface_set_flash_mode;
+
+  // TODO: more
+}
+
+void
+gst_photo_iface_init_settings (GstDroidCamSrc * src)
+{
+  memset (&src->photo_settings, 0x0, sizeof (src->photo_settings));
+  src->photo_settings.flash_mode = GST_PHOTOGRAPHY_FLASH_MODE_AUTO;
+
+  // TODO: more
 }
 
 void
 gst_photo_iface_add_properties (GObjectClass * gobject_class)
 {
-  // TODO:
+  g_object_class_override_property (gobject_class, PROP_FLASH_MODE,
+      GST_PHOTOGRAPHY_PROP_FLASH_MODE);
+
+  // TODO: more
+}
+
+void
+gst_photo_iface_settings_to_params (GstDroidCamSrc * src)
+{
+  _gst_photo_iface_set_flash_mode (src, src->photo_settings.flash_mode, FALSE);
+  // TODO: more
 }
 
 gboolean
-gst_photo_iface_get_property (GObject * object, guint prop_id,
+gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
   switch (prop_id) {
-
+    case PROP_FLASH_MODE:
+      g_value_set_enum (value, _gst_photo_iface_get_flash_mode (src));
+      return TRUE;
   }
+
+  // TODO: more
 
   return FALSE;
 }
 
 gboolean
-gst_photo_iface_set_property (GObject * object, guint prop_id,
+gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
   switch (prop_id) {
-
+    case PROP_FLASH_MODE:
+      _gst_photo_iface_set_flash_mode (src, g_value_get_enum (value), TRUE);
+      return TRUE;
   }
 
+  // TODO: more
+
   return FALSE;
+}
+
+static gboolean
+gst_photo_iface_get_flash_mode (GstPhotography * photo, GstFlashMode * flash)
+{
+  *flash = _gst_photo_iface_get_flash_mode (GST_DROID_CAM_SRC (photo));
+
+  return TRUE;
+}
+
+static gboolean
+gst_photo_iface_set_flash_mode (GstPhotography * photo, GstFlashMode flash)
+{
+  return _gst_photo_iface_set_flash_mode (GST_DROID_CAM_SRC (photo), flash,
+      TRUE);
+}
+
+static GstFlashMode
+_gst_photo_iface_get_flash_mode (GstDroidCamSrc * src)
+{
+  GstFlashMode flash;
+
+  GST_OBJECT_LOCK (src);
+
+  flash = src->photo_settings.flash_mode;
+
+  GST_OBJECT_UNLOCK (src);
+
+  return flash;
+}
+
+static gboolean
+_gst_photo_iface_set_flash_mode (GstDroidCamSrc * src, GstFlashMode flash,
+    gboolean commit)
+{
+  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+
+  const char *val =
+      gst_droid_cam_src_find_droid (gst_droid_cam_src_flash_table, flash);
+  if (!val) {
+    return FALSE;
+  }
+
+  GST_OBJECT_LOCK (src);
+  src->photo_settings.flash_mode = flash;
+
+  if (!src->camera_params) {
+    GST_OBJECT_UNLOCK (src);
+    return TRUE;
+  }
+
+  camera_params_set (src->camera_params, "flash-mode", val);
+  GST_OBJECT_UNLOCK (src);
+
+  if (!commit) {
+    return TRUE;
+  }
+
+  return klass->set_camera_params (src);
 }

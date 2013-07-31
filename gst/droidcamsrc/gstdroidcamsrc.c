@@ -287,6 +287,8 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   g_mutex_init (&src->video_capture_status_lock);
   g_cond_init (&src->video_capture_status_cond);
 
+  gst_photo_iface_init_settings (src);
+
   src->vfsrc = gst_vf_src_pad_new (&vfsrc_template,
       GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME);
   gst_element_add_pad (GST_ELEMENT (src), src->vfsrc);
@@ -335,13 +337,11 @@ static void
 gst_droid_cam_src_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstDroidCamSrc *src;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (object);
 
-  if (gst_photo_iface_get_property (object, prop_id, value, pspec)) {
+  if (gst_photo_iface_get_property (src, prop_id, value, pspec)) {
     return;
   }
-
-  src = GST_DROID_CAM_SRC (object);
 
   switch (prop_id) {
     case PROP_CAMERA_DEVICE:
@@ -370,13 +370,11 @@ static void
 gst_droid_cam_src_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstDroidCamSrc *src;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (object);
 
-  if (gst_photo_iface_set_property (object, prop_id, value, pspec)) {
+  if (gst_photo_iface_set_property (src, prop_id, value, pspec)) {
     return;
   }
-
-  src = GST_DROID_CAM_SRC (object);
 
   switch (prop_id) {
     case PROP_CAMERA_DEVICE:
@@ -431,6 +429,8 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   }
 
   gst_droid_cam_src_set_recording_hint (src, FALSE);
+
+  gst_photo_iface_settings_to_params (src);
 
   if (!gst_droid_cam_src_set_callbacks (src)) {
     goto cleanup;
