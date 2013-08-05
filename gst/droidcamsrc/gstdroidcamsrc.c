@@ -132,6 +132,8 @@ static void gst_droid_cam_src_free_video_buffer (gpointer data);
 static void gst_droid_cam_src_send_capture_start (GstDroidCamSrc * src);
 static void gst_droid_cam_src_send_capture_end (GstDroidCamSrc * src);
 static void gst_droid_cam_src_boilerplate_init (GType type);
+static void gst_droid_cam_src_send_focus_message (GstDroidCamSrc * src,
+    const gchar * msg_name, int status);
 
 GST_BOILERPLATE_FULL (GstDroidCamSrc, gst_droid_cam_src, GstBin,
     GST_TYPE_BIN, gst_droid_cam_src_boilerplate_init);
@@ -1421,6 +1423,17 @@ gst_droid_cam_src_notify_callback (int32_t msg_type,
       gst_droid_cam_src_send_capture_start (src);
       break;
 
+    case CAMERA_MSG_FOCUS:
+      if (ext1 == TRUE) {
+        gst_droid_cam_src_send_focus_message (src,
+            GST_PHOTOGRAPHY_AUTOFOCUS_DONE,
+            GST_PHOTOGRAPHY_FOCUS_STATUS_SUCCESS);
+      } else {
+        gst_droid_cam_src_send_focus_message (src,
+            GST_PHOTOGRAPHY_AUTOFOCUS_DONE, GST_PHOTOGRAPHY_FOCUS_STATUS_FAIL);
+      }
+
+      break;
     default:
       GST_WARNING_OBJECT (src, "unknown message 0x%x", msg_type);
       break;
@@ -1510,7 +1523,6 @@ gst_droid_cam_src_send_capture_start (GstDroidCamSrc * src)
 
   GST_LOG_OBJECT (src, "%s message sent", GST_DROID_CAM_SRC_CAPTURE_START);
 
-
   src->capture_start_sent = TRUE;
 }
 
@@ -1540,4 +1552,62 @@ gst_droid_cam_src_send_capture_end (GstDroidCamSrc * src)
 
 
   src->capture_end_sent = TRUE;
+}
+
+void
+gst_droid_cam_src_start_autofocus (GstDroidCamSrc * src)
+{
+  int err;
+
+  GST_DEBUG_OBJECT (src, "start autofocus");
+
+  if (!src->dev) {
+    GST_WARNING_OBJECT (src, "camera device not opened");
+    return;
+  }
+
+  err = src->dev->ops->auto_focus (src->dev);
+  if (err != 0) {
+    GST_WARNING_OBJECT (src, "Error %d starting autofocus", err);
+    return;
+  }
+}
+
+void
+gst_droid_cam_src_stop_autofocus (GstDroidCamSrc * src)
+{
+  int err;
+
+  GST_DEBUG_OBJECT (src, "stop autofocus");
+
+  if (!src->dev) {
+    GST_WARNING_OBJECT (src, "camera device not opened");
+    return;
+  }
+
+  err = src->dev->ops->cancel_auto_focus (src->dev);
+  if (err != 0) {
+    GST_WARNING_OBJECT (src, "Error %d stopping autofocus", err);
+    return;
+  }
+}
+
+static void
+gst_droid_cam_src_send_focus_message (GstDroidCamSrc * src,
+    const gchar * msg_name, int status)
+{
+  GstStructure *s;
+  GstMessage *msg;
+
+  GST_DEBUG_OBJECT (src, "send focus message %s %d", msg_name, status);
+
+  s = gst_structure_new (msg_name, "status", G_TYPE_INT, status, NULL);
+  msg = gst_message_new_element (GST_OBJECT (src), s);
+
+  if (!gst_element_post_message (GST_ELEMENT (src), msg)) {
+    GST_WARNING_OBJECT (src,
+        "This element has no bus, therefore no message sent!");
+  }
+
+  GST_LOG_OBJECT (src, "%s message sent", msg_name);
 }

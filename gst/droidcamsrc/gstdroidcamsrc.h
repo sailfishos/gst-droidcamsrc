@@ -145,6 +145,9 @@ struct _GstDroidCamSrcClass {
 
 GType gst_droid_cam_src_get_type (void);
 
+void gst_droid_cam_src_start_autofocus (GstDroidCamSrc * src);
+void gst_droid_cam_src_stop_autofocus (GstDroidCamSrc * src);
+
 G_END_DECLS
 
 #endif /* __GST_DROID_CAM_SRC_H__ */

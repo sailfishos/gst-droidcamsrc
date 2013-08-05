@@ -47,6 +47,8 @@ static GstFlashMode _gst_photo_iface_get_flash_mode (GstDroidCamSrc * src);
 static gboolean _gst_photo_iface_set_flash_mode (GstDroidCamSrc * src,
     GstFlashMode flash, gboolean commit);
 
+static void gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on);
+
 void
 gst_photo_iface_init (GType type)
 {
@@ -87,6 +89,7 @@ gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
   iface->get_flash_mode = gst_photo_iface_get_flash_mode;
   iface->set_flash_mode = gst_photo_iface_set_flash_mode;
 
+  iface->set_autofocus = gst_photo_iface_set_autofocus;
   // TODO: more
 }
 
@@ -202,4 +205,16 @@ _gst_photo_iface_set_flash_mode (GstDroidCamSrc * src, GstFlashMode flash,
   }
 
   return klass->set_camera_params (src);
+}
+
+static void
+gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  if (on) {
+    gst_droid_cam_src_start_autofocus (src);
+  } else {
+    gst_droid_cam_src_stop_autofocus (src);
+  }
 }
