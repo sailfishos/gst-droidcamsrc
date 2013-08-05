@@ -86,6 +86,7 @@ struct _GstDroidCamSrc {
 
   GstCameraBufferPool *pool;
 
+  gint user_camera_device;
   gint camera_device;
   gint mode;
   gboolean video_metadata;
@@ -129,6 +130,8 @@ struct _GstDroidCamSrc {
 
   gboolean capture_start_sent;
   gboolean capture_end_sent;
+
+  int camera_sensor_orientation[2];
 
   /* photography interface bits */
   GstPhotoSettings photo_settings;

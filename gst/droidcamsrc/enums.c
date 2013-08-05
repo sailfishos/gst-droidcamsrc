@@ -20,7 +20,7 @@
 #include "enums.h"
 
 GType
-gst_droid_cam_src_camera_deviceget_type (void)
+gst_droid_cam_src_camera_device_get_type (void)
 {
   static GType type = 0;
 
@@ -36,6 +36,34 @@ gst_droid_cam_src_camera_deviceget_type (void)
     type =
         g_enum_register_static (g_intern_static_string
         ("GstDroidCamSrcCameraDevice"), values);
+  }
+
+  return type;
+}
+
+GType
+gst_droid_cam_src_sensor_mount_angle_get_type (void)
+{
+  static GType type = 0;
+
+  if (type == 0) {
+    static const GEnumValue values[] = {
+      {GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN,
+          "GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN", "unknown"},
+      {GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_0,
+          "GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_0", "0"},
+      {GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_90,
+          "GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_90", "90"},
+      {GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_180,
+          "GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_180", "180"},
+      {GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_270,
+          "GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_270", "270"},
+      {0, NULL, NULL}
+    };
+
+    type =
+        g_enum_register_static (g_intern_static_string
+        ("GstDroidCamSrcSensorMountAngle"), values);
   }
 
   return type;

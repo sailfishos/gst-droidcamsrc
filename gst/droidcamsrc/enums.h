@@ -24,15 +24,25 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_DROID_CAM_SRC_CAMERA_DEVICE  gst_droid_cam_src_camera_deviceget_type ()
+#define GST_TYPE_DROID_CAM_SRC_CAMERA_DEVICE gst_droid_cam_src_camera_device_get_type ()
+#define GST_TYPE_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE gst_droid_cam_src_sensor_mount_angle_get_type ()
 
-GType gst_droid_cam_src_camera_deviceget_type (void);
+GType gst_droid_cam_src_camera_device_get_type (void);
+GType gst_droid_cam_src_sensor_mount_angle_get_type (void);
 
 typedef enum
 {
   GST_DROID_CAM_SRC_CAMERA_DEVICE_PRIMARY = 0,
   GST_DROID_CAM_SRC_CAMERA_DEVICE_SECONDARY = 1,
 } GstDroidCamSrcCameraDevice;
+
+typedef enum {
+  GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN = -1,
+  GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_0 = 0,
+  GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_90 = 90,
+  GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_180 = 180,
+  GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_270 = 270,
+} GstDroidCamSrcSensorMountAngle;
 
 G_END_DECLS
 

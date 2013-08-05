@@ -229,6 +229,13 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
           "Set output mode for video data",
           DEFAULT_VIDEO_METADATA, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_SENSOR_MOUNT_ANGLE,
+      g_param_spec_enum ("sensor-mount-angle", "Sensor mount angle",
+          "The orientation of the camera image. The value is the angle that the camera image needs to be rotated clockwise so it shows correctly on the display in its natural orientation.",
+          GST_TYPE_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE,
+          GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN,
+          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
   gst_photo_iface_add_properties (gobject_class);
 
   droidcamsrc_signals[START_CAPTURE_SIGNAL] =
@@ -256,6 +263,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->dev = NULL;
   src->hwmod = NULL;
   src->cam_dev = NULL;
+  src->user_camera_device = DEFAULT_CAMERA_DEVICE;
   src->camera_device = DEFAULT_CAMERA_DEVICE;
   src->mode = DEFAULT_MODE;
   src->video_metadata = DEFAULT_VIDEO_METADATA;
@@ -288,6 +296,11 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->video_capture_status = VIDEO_CAPTURE_DONE;
   g_mutex_init (&src->video_capture_status_lock);
   g_cond_init (&src->video_capture_status_cond);
+
+  src->camera_sensor_orientation[0] =
+      GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN;
+  src->camera_sensor_orientation[1] =
+      GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN;
 
   gst_photo_iface_init_settings (src);
 
@@ -362,6 +375,11 @@ gst_droid_cam_src_get_property (GObject * object, guint prop_id,
       g_value_set_boolean (value, !src->capturing);
       break;
 
+    case PROP_SENSOR_MOUNT_ANGLE:
+      g_value_set_enum (value,
+          src->camera_sensor_orientation[src->camera_device]);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -380,7 +398,11 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
     case PROP_CAMERA_DEVICE:
-      src->camera_device = g_value_get_enum (value);
+      src->user_camera_device = g_value_get_enum (value);
+      if (!src->dev) {
+        src->camera_device = src->user_camera_device;
+      }
+
       break;
 
     case PROP_MODE:
@@ -409,6 +431,8 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
 
   GST_DEBUG_OBJECT (src, "Attempting to open camera %d", src->camera_device);
 
+  src->camera_device = src->user_camera_device;
+  /* We assume camera id 0 is back and 1 is front */
   cam_id = g_strdup_printf ("%i", src->camera_device);
   err = src->cam->common.methods->open (src->hwmod, cam_id, &src->cam_dev);
   g_free (cam_id);
@@ -449,6 +473,7 @@ static gboolean
 gst_droid_cam_src_probe_camera (GstDroidCamSrc * src)
 {
   int err;
+  struct camera_info info;
 
   GST_DEBUG_OBJECT (src, "probe camera");
 
@@ -484,6 +509,27 @@ gst_droid_cam_src_probe_camera (GstDroidCamSrc * src)
         (NULL));
     goto cleanup;
   }
+
+  /* We assume camera 0 is primary and camera 1 is secondary */
+  memset (src->camera_sensor_orientation, -1, 2);
+  err = src->cam->get_camera_info (0, &info);
+  if (err != 0) {
+    GST_WARNING_OBJECT (src, "Error %d getting camera 0 info", err);
+  } else {
+    src->camera_sensor_orientation[0] = info.orientation;
+  }
+
+  err = src->cam->get_camera_info (1, &info);
+  if (err != 0) {
+    GST_WARNING_OBJECT (src, "Error %d getting camera 1 info", err);
+  } else {
+    src->camera_sensor_orientation[1] = info.orientation;
+  }
+
+  GST_DEBUG_OBJECT (src, "Camera orientation: 0 = %d, 1 = %d",
+      src->camera_sensor_orientation[0], src->camera_sensor_orientation[1]);
+
+  g_object_notify (G_OBJECT (src), "sensor-mount-angle");
 
   return TRUE;
 
