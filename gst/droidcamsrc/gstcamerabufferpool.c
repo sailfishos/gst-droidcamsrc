@@ -158,7 +158,8 @@ gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
       "width", G_TYPE_INT, pool->width,
       "height", G_TYPE_INT, pool->height,
       "framerate", GST_TYPE_FRACTION, pool->fps_n, pool->fps_d,
-      "format", G_TYPE_INT, pool->format, NULL);
+      "format", G_TYPE_INT, pool->format,
+      "orientation-angle", G_TYPE_INT, pool->orientation, NULL);
 
   GST_DEBUG_OBJECT (pool, "setting buffer caps to %" GST_PTR_FORMAT, caps);
 
@@ -599,6 +600,7 @@ gst_camera_buffer_pool_init (GstCameraBufferPool * pool)
   pool->frames = 0;
   pool->fps_n = 0;
   pool->fps_d = 0;
+  pool->orientation = -1;
 
   g_mutex_init (&pool->lock);
 

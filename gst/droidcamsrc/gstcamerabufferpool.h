@@ -85,6 +85,7 @@ struct _GstCameraBufferPool {
   GstClockTime buffer_duration;
   int fps_n;
   int fps_d;
+  int orientation;
 };
 
 struct _GstCameraBufferPoolClass {

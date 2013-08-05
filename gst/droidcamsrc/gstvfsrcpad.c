@@ -188,7 +188,21 @@ gst_droid_cam_src_vfsrc_getcaps (GstPad * pad)
   GST_OBJECT_LOCK (src);
 
   if (src->camera_params) {
+    int x;
+    uint len;
+
     caps = camera_params_get_viewfinder_caps (src->camera_params);
+    len = gst_caps_get_size (caps);
+
+    GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+
+    for (x = 0; x < len; x++) {
+      GstStructure *s = gst_caps_get_structure (caps, x);
+      gst_structure_set (s, "orientation-angle", G_TYPE_INT,
+          src->pool->orientation, NULL);
+    }
+
+    GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
   } else {
     caps = gst_caps_copy (gst_pad_get_pad_template_caps (pad));
   }
@@ -435,10 +449,13 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
     gst_caps_unref (caps);
 
     /* Use default. */
+    GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
     caps = gst_caps_new_simple (GST_NATIVE_BUFFER_NAME,
         "width", G_TYPE_INT, DEFAULT_VF_WIDTH,
         "height", G_TYPE_INT, DEFAULT_VF_HEIGHT,
-        "framerate", GST_TYPE_FRACTION, DEFAULT_FPS, 1, NULL);
+        "framerate", GST_TYPE_FRACTION, DEFAULT_FPS, 1,
+        "orientation-angle", G_TYPE_INT, src->pool->orientation, NULL);
+    GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
 
     GST_DEBUG_OBJECT (src, "using default caps %" GST_PTR_FORMAT, caps);
 

@@ -53,7 +53,8 @@ GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_VIEWFINDER_PAD_NAME,
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS (GST_NATIVE_BUFFER_NAME ","
         "framerate = (fraction) [ 0, MAX ], "
-        "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ] "));
+        "width = (int) [ 1, MAX ], height = (int) [ 1, MAX ], "
+        "orientation-angle = {-1, 0, 90, 180, 270}"));
 
 static GstStaticPadTemplate imgsrc_template =
 GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_IMAGE_PAD_NAME,
@@ -61,7 +62,7 @@ GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_IMAGE_PAD_NAME,
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS ("image/jpeg, "
         "framerate = (fraction) [ 0, MAX ], "
-        "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ] "));
+        "width = (int) [ 1, MAX ], height = (int) [ 1, MAX ]"));
 
 static GstStaticPadTemplate vidsrc_template =
 GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_VIDEO_PAD_NAME,
@@ -69,7 +70,7 @@ GST_STATIC_PAD_TEMPLATE (GST_BASE_CAMERA_SRC_VIDEO_PAD_NAME,
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS (GST_DROID_CAM_SRC_VIDEO_CAPS_NAME ","
         "framerate = (fraction) [ 0, MAX ], "
-        "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ] "));
+        "width = (int) [ 1, MAX ], height = (int) [ 1, MAX ] "));
 
 static void gst_droid_cam_src_finalize (GObject * object);
 static void gst_droid_cam_src_get_property (GObject * object, guint prop_id,
@@ -461,6 +462,10 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   if (!gst_droid_cam_src_set_callbacks (src)) {
     goto cleanup;
   }
+
+  GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
+  src->pool->orientation = src->camera_sensor_orientation[src->camera_device];
+  GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
 
   return TRUE;
 
