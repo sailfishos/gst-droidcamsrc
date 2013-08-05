@@ -231,7 +231,7 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_SENSOR_MOUNT_ANGLE,
       g_param_spec_enum ("sensor-mount-angle", "Sensor mount angle",
-          "The orientation of the camera image. The value is the angle that the camera image needs to be rotated clockwise so it shows correctly on the display in its natural orientation.",
+          "The orientation angle of camera sensor relative to the natural display orientation.",
           GST_TYPE_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE,
           GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN,
           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
