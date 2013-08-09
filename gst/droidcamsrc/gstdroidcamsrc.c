@@ -455,8 +455,6 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
     free (params);
   }
 
-  gst_droid_cam_src_set_recording_hint (src, FALSE);
-
   gst_photo_iface_settings_to_params (src);
 
   if (!gst_droid_cam_src_set_callbacks (src)) {
@@ -877,6 +875,7 @@ static gboolean
 gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
 {
   int err;
+  int mode;
 
   GST_DEBUG_OBJECT (src, "start pipeline");
 
@@ -885,12 +884,25 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_RAW_IMAGE);
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_RAW_IMAGE_NOTIFY);
 
+  mode = src->mode;
+
+  /* We always start in image mode otherwise Android HAL will barf */
+  src->mode = MODE_IMAGE;
+  gst_droid_cam_src_set_recording_hint (src, FALSE);
+
   err = src->dev->ops->start_preview (src->dev);
   if (err != 0) {
     GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("Could not start camera: %d", err),
         (NULL));
 
     return FALSE;
+  }
+
+  if (mode != src->mode) {
+    src->mode = mode;
+    GST_DEBUG_OBJECT (src, "setting camera mode to %d after starting pipeline",
+        mode);
+    gst_droid_cam_src_set_recording_hint (src, TRUE);
   }
 
   return TRUE;
