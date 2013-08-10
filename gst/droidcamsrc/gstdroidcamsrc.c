@@ -127,8 +127,11 @@ static void gst_droid_cam_src_handle_compressed_image (GstDroidCamSrc * src,
 
 static gboolean gst_droid_cam_src_finish_capture (GstDroidCamSrc * src);
 
+#if 0
 static void gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src,
     gboolean apply);
+#endif
+
 static void gst_droid_cam_src_free_video_buffer (gpointer data);
 static void gst_droid_cam_src_send_capture_start (GstDroidCamSrc * src);
 static void gst_droid_cam_src_send_capture_end (GstDroidCamSrc * src);
@@ -408,7 +411,9 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
 
     case PROP_MODE:
       src->mode = g_value_get_enum (value);
+#if 0
       gst_droid_cam_src_set_recording_hint (src, TRUE);
+#endif
       break;
 
     case PROP_VIDEO_METADATA:
@@ -875,7 +880,9 @@ static gboolean
 gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
 {
   int err;
+#if 0
   int mode;
+#endif
 
   GST_DEBUG_OBJECT (src, "start pipeline");
 
@@ -884,11 +891,13 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_RAW_IMAGE);
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_RAW_IMAGE_NOTIFY);
 
+#if 0
   mode = src->mode;
 
   /* We always start in image mode otherwise Android HAL will barf */
   src->mode = MODE_IMAGE;
   gst_droid_cam_src_set_recording_hint (src, FALSE);
+#endif
 
   err = src->dev->ops->start_preview (src->dev);
   if (err != 0) {
@@ -897,13 +906,14 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
 
     return FALSE;
   }
-
+#if 0
   if (mode != src->mode) {
     src->mode = mode;
     GST_DEBUG_OBJECT (src, "setting camera mode to %d after starting pipeline",
         mode);
     gst_droid_cam_src_set_recording_hint (src, TRUE);
   }
+#endif
 
   return TRUE;
 }
@@ -1503,6 +1513,7 @@ gst_droid_cam_src_notify_callback (int32_t msg_type,
   }
 }
 
+#if 0
 static void
 gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src, gboolean apply)
 {
@@ -1538,6 +1549,7 @@ gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src, gboolean apply)
     gst_droid_cam_src_set_camera_params (src);
   }
 }
+#endif
 
 static void
 gst_droid_cam_src_free_video_buffer (gpointer data)
