@@ -314,10 +314,43 @@ static void
 gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+  gboolean reset_mode;
+
+  GST_OBJECT_LOCK (src);
+  GstFocusMode mode = src->photo_settings.focus_mode;
+  GST_OBJECT_UNLOCK (src);
+
+  switch (mode) {
+    case GST_PHOTOGRAPHY_FOCUS_MODE_AUTO:
+    case GST_PHOTOGRAPHY_FOCUS_MODE_MACRO:
+      reset_mode = FALSE;
+      break;
+
+    default:
+      reset_mode = TRUE;
+      break;
+  }
+
+  if (reset_mode && on) {
+    /* Set mode to auto */
+    GST_OBJECT_LOCK (src);
+    src->photo_settings.focus_mode = GST_PHOTOGRAPHY_FOCUS_MODE_AUTO;
+    GST_OBJECT_UNLOCK (src);
+    gst_photo_iface_update_focus_mode (src);
+
+    GST_OBJECT_LOCK (src);
+    src->photo_settings.focus_mode = mode;
+    GST_OBJECT_UNLOCK (src);
+  }
 
   if (on) {
     gst_droid_cam_src_start_autofocus (src);
   } else {
     gst_droid_cam_src_stop_autofocus (src);
+  }
+
+  if (reset_mode && !on) {
+    /* Switching off auto focus. We reset the mode back. */
+    gst_photo_iface_update_focus_mode (src);
   }
 }
