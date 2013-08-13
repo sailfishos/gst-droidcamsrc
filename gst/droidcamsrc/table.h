@@ -29,6 +29,21 @@ TableEntry gst_droid_cam_src_flash_table[] = {
   {"auto", GST_PHOTOGRAPHY_FLASH_MODE_AUTO},
   {"off",  GST_PHOTOGRAPHY_FLASH_MODE_OFF},
   {"on",   GST_PHOTOGRAPHY_FLASH_MODE_ON},
+  /*  {"",     GST_PHOTOGRAPHY_FLASH_MODE_RED_EYE}, */
+  {NULL,   -1}
+};
+
+TableEntry gst_droid_cam_src_focus_table[] = {
+  {"auto",       GST_PHOTOGRAPHY_FOCUS_MODE_AUTO},
+  {"macro",      GST_PHOTOGRAPHY_FOCUS_MODE_MACRO},
+  /*  {"", GST_PHOTOGRAPHY_FOCUS_MODE_PORTRAIT}, */
+  {"infinity",   GST_PHOTOGRAPHY_FOCUS_MODE_INFINITY},
+  {"fixed",      GST_PHOTOGRAPHY_FOCUS_MODE_HYPERFOCAL},
+  {"edof",       GST_PHOTOGRAPHY_FOCUS_MODE_EXTENDED},
+  /* There is no continuous mode for Android but we will pick either video or image continuous modes
+   * depending on the active camera mode */
+  {"continuous", GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_NORMAL},
+  {"continuous", GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_EXTENDED},
   {NULL,   -1}
 };
 

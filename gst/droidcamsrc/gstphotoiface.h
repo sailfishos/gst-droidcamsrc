@@ -36,6 +36,7 @@ enum
 
   /* photography */
   PROP_FLASH_MODE,
+  PROP_FOCUS_MODE,
 
   /* end */
   N_PROPS,
@@ -50,6 +51,8 @@ gboolean gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,
 				       GValue * value, GParamSpec * pspec);
 gboolean gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
 				       const GValue * value, GParamSpec * pspec);
+
+void gst_photo_iface_update_focus_mode (GstDroidCamSrc * src);
 
 G_END_DECLS
 

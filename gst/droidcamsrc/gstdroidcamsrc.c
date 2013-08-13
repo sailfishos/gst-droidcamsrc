@@ -411,6 +411,8 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
 
     case PROP_MODE:
       src->mode = g_value_get_enum (value);
+      gst_photo_iface_update_focus_mode (src);
+
 #if 0
       gst_droid_cam_src_set_recording_hint (src, TRUE);
 #endif
