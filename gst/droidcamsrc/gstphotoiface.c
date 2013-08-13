@@ -339,6 +339,7 @@ gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on)
     gst_photo_iface_update_focus_mode (src);
 
     GST_OBJECT_LOCK (src);
+    /* Restore back original mode but don't try to set it yet */
     src->photo_settings.focus_mode = mode;
     GST_OBJECT_UNLOCK (src);
   }
