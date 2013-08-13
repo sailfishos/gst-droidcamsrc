@@ -1499,13 +1499,26 @@ gst_droid_cam_src_notify_callback (int32_t msg_type,
       break;
 
     case CAMERA_MSG_FOCUS:
-      if (ext1 == TRUE) {
+      if (ext1) {
         gst_droid_cam_src_send_focus_message (src,
             GST_PHOTOGRAPHY_AUTOFOCUS_DONE,
             GST_PHOTOGRAPHY_FOCUS_STATUS_SUCCESS);
       } else {
         gst_droid_cam_src_send_focus_message (src,
             GST_PHOTOGRAPHY_AUTOFOCUS_DONE, GST_PHOTOGRAPHY_FOCUS_STATUS_FAIL);
+      }
+
+      break;
+
+    case CAMERA_MSG_FOCUS_MOVE:
+      if (ext1) {
+        /* focus starts to move */
+        gst_droid_cam_src_send_focus_message (src,
+            "caf-update", GST_PHOTOGRAPHY_FOCUS_STATUS_RUNNING);
+      } else {
+        /* Focus stopped moving so it must be success */
+        gst_droid_cam_src_send_focus_message (src,
+            "caf-update", GST_PHOTOGRAPHY_FOCUS_STATUS_SUCCESS);
       }
 
       break;
