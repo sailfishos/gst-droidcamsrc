@@ -1511,6 +1511,11 @@ gst_droid_cam_src_notify_callback (int32_t msg_type,
       break;
 
     case CAMERA_MSG_FOCUS_MOVE:
+      GST_LOG_OBJECT (src, "focus move message: %i", ext1);
+      /* We will simply log focus move for now. We don't have a way
+       * to get CAF status from Android HAL and the assumption that
+       * if move stopps then we have focus is incorrect */
+#if 0
       if (ext1) {
         /* focus starts to move */
         gst_droid_cam_src_send_focus_message (src,
@@ -1520,7 +1525,7 @@ gst_droid_cam_src_notify_callback (int32_t msg_type,
         gst_droid_cam_src_send_focus_message (src,
             "caf-update", GST_PHOTOGRAPHY_FOCUS_STATUS_SUCCESS);
       }
-
+#endif
       break;
 
     case CAMERA_MSG_ERROR:
