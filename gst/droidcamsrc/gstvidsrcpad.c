@@ -106,8 +106,10 @@ gst_droid_cam_src_vidsrc_getcaps (GstPad * pad)
   GST_OBJECT_LOCK (src);
 
   if (src->camera_params) {
+    GST_LOG_OBJECT (src, "caps from camera parameters");
     caps = camera_params_get_video_caps (src->camera_params);
   } else {
+    GST_LOG_OBJECT (src, "caps from template");
     caps = gst_caps_copy (gst_pad_get_pad_template_caps (pad));
   }
 
