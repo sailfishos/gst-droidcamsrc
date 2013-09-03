@@ -282,15 +282,32 @@ camera_params_set_viewfinder_fps (struct camera_params *params, int fps)
 GstCaps *
 camera_params_get_video_caps (struct camera_params *params)
 {
+  GValue fps_list = G_VALUE_INIT;
+  g_value_init (&fps_list, GST_TYPE_LIST);
+
   std::map < std::string, std::vector < std::string > >::iterator sizes =
       params->items.find ("video-size-values");
 
-  // TODO: how to query framerate for video?
   std::map < std::string, std::vector < std::string > >::iterator fpss =
       params->items.find ("preview-frame-rate-values");
 
   if (sizes == params->items.end () || fpss == params->items.end ()) {
     return gst_caps_new_empty ();
+  }
+
+  for (std::vector < std::string >::iterator fps = fpss->second.begin ();
+       fps != fpss->second.end (); fps++) {
+
+    int f = atoi ((*fps).c_str ());
+
+    if (!f) {
+      continue;
+    }
+
+    GValue val = G_VALUE_INIT;
+    g_value_init (&val, GST_TYPE_FRACTION);
+    gst_value_set_fraction (&val, f, 1);
+    gst_value_list_append_value (&fps_list, &val);
   }
 
   GstCaps *caps = gst_caps_new_empty ();
@@ -317,26 +334,13 @@ camera_params_get_video_caps (struct camera_params *params)
       continue;
     }
 
-    for (std::vector < std::string >::iterator fps = fpss->second.begin ();
-        fps != fpss->second.end (); fps++) {
-
-      int f = atoi ((*fps).c_str ());
-
-      if (!f) {
-        continue;
-      }
-      // TODO: hardcoded
-      GstStructure *s = gst_structure_new (GST_DROID_CAM_SRC_VIDEO_CAPS_NAME,
-          "width", G_TYPE_INT, width,
-          "height", G_TYPE_INT, height,
-          "framerate", GST_TYPE_FRACTION, f, 1,
-          NULL);
-
-      gst_caps_append_structure (caps, s);
-    }
+    GstStructure *s = gst_structure_new (GST_DROID_CAM_SRC_VIDEO_CAPS_NAME,
+					 "width", G_TYPE_INT, width,
+					 "height", G_TYPE_INT, height,
+					 NULL);
+    gst_structure_set_value (s, "framerate", &fps_list);
+    gst_caps_append_structure (caps, s);
   }
-
-  gst_caps_do_simplify (caps);
 
   return caps;
 }
