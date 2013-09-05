@@ -32,6 +32,9 @@
 #include "cameraparams.h"
 #include "table.h"
 
+GST_DEBUG_CATEGORY_STATIC (droidphoto_debug);
+#define GST_CAT_DEFAULT droidphoto_debug
+
 static void
 gst_photo_iface_implements_interface_init (GstImplementsInterfaceClass * klass);
 static gboolean
@@ -75,6 +78,9 @@ gst_photo_iface_init (GType type)
     NULL,
     NULL,
   };
+
+  GST_DEBUG_CATEGORY_INIT (droidphoto_debug, "droidphoto", 0,
+      "Android camera source photography interface");
 
   g_type_add_interface_static (type, GST_TYPE_IMPLEMENTS_INTERFACE,
       &implements_iface_info);
@@ -212,6 +218,9 @@ _gst_photo_iface_set_flash_mode (GstDroidCamSrc * src, GstFlashMode flash,
 
   const char *val =
       gst_droid_cam_src_find_droid (gst_droid_cam_src_flash_table, flash);
+
+  GST_DEBUG_OBJECT (src, "set flash mode to %i (%s)", flash, val);
+
   if (!val) {
     return FALSE;
   }
@@ -271,6 +280,9 @@ _gst_photo_iface_set_focus_mode (GstDroidCamSrc * src,
 
   const char *val =
       gst_droid_cam_src_find_droid (gst_droid_cam_src_focus_table, focus);
+
+  GST_DEBUG_OBJECT (src, "set focus mode to %i (%s)", focus, val);
+
   if (!val) {
     return FALSE;
   }
