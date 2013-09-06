@@ -116,6 +116,8 @@ gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
 void
 gst_photo_iface_init_settings (GstDroidCamSrc * src)
 {
+  GST_DEBUG_OBJECT (src, "init settings");
+
   memset (&src->photo_settings, 0x0, sizeof (src->photo_settings));
   src->photo_settings.flash_mode = GST_PHOTOGRAPHY_FLASH_MODE_AUTO;
   src->photo_settings.focus_mode = GST_PHOTOGRAPHY_FOCUS_MODE_AUTO;
@@ -137,6 +139,8 @@ gst_photo_iface_add_properties (GObjectClass * gobject_class)
 void
 gst_photo_iface_settings_to_params (GstDroidCamSrc * src)
 {
+  GST_DEBUG_OBJECT (src, "settings to params");
+
   _gst_photo_iface_set_flash_mode (src, src->photo_settings.flash_mode, FALSE);
   _gst_photo_iface_set_focus_mode (src, src->photo_settings.focus_mode, FALSE);
   // TODO: more
@@ -184,7 +188,11 @@ gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
 static gboolean
 gst_photo_iface_get_flash_mode (GstPhotography * photo, GstFlashMode * flash)
 {
-  *flash = _gst_photo_iface_get_flash_mode (GST_DROID_CAM_SRC (photo));
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_DEBUG_OBJECT (src, "get flash mode");
+
+  *flash = _gst_photo_iface_get_flash_mode (src);
 
   return TRUE;
 }
@@ -205,6 +213,8 @@ _gst_photo_iface_get_flash_mode (GstDroidCamSrc * src)
 
   flash = src->photo_settings.flash_mode;
 
+  GST_DEBUG_OBJECT (src, "returning flash mode %i", flash);
+
   GST_OBJECT_UNLOCK (src);
 
   return flash;
@@ -224,6 +234,8 @@ _gst_photo_iface_set_flash_mode (GstDroidCamSrc * src, GstFlashMode flash,
   if (!val) {
     return FALSE;
   }
+
+  GST_DEBUG_OBJECT (src, "storing flash mode %i", flash);
 
   GST_OBJECT_LOCK (src);
   src->photo_settings.flash_mode = flash;
@@ -246,7 +258,11 @@ _gst_photo_iface_set_flash_mode (GstDroidCamSrc * src, GstFlashMode flash,
 static gboolean
 gst_photo_iface_get_focus_mode (GstPhotography * photo, GstFocusMode * focus)
 {
-  *focus = _gst_photo_iface_get_focus_mode (GST_DROID_CAM_SRC (photo));
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_DEBUG_OBJECT (src, "get focus mode");
+
+  *focus = _gst_photo_iface_get_focus_mode (src);
 
   return TRUE;
 }
@@ -267,6 +283,8 @@ _gst_photo_iface_get_focus_mode (GstDroidCamSrc * src)
 
   focus = src->photo_settings.focus_mode;
 
+  GST_DEBUG_OBJECT (src, "returning focus mode %i", focus);
+
   GST_OBJECT_UNLOCK (src);
 
   return focus;
@@ -286,6 +304,8 @@ _gst_photo_iface_set_focus_mode (GstDroidCamSrc * src,
   if (!val) {
     return FALSE;
   }
+
+  GST_DEBUG_OBJECT (src, "storing focus mode %i", focus);
 
   GST_OBJECT_LOCK (src);
   src->photo_settings.focus_mode = focus;
