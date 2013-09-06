@@ -239,6 +239,10 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   GST_LOG_OBJECT (src, "video capture status %d", src->video_capture_status);
 
   switch (src->video_capture_status) {
+    case VIDEO_CAPTURE_ERROR:
+      g_assert_not_reached ();
+      break;
+
     case VIDEO_CAPTURE_STARTING:
       send_new_segment = TRUE;
       break;
@@ -310,6 +314,21 @@ push_buffer:
   ret = gst_pad_push (src->vidsrc, buffer);
 
   if (ret != GST_FLOW_OK) {
+    g_mutex_lock (&src->video_lock);
+
+    g_mutex_lock (&src->video_capture_status_lock);
+    src->video_capture_status = VIDEO_CAPTURE_ERROR;
+    g_cond_signal (&src->video_capture_status_cond);
+    g_mutex_unlock (&src->video_capture_status_lock);
+
+    while (src->video_queue->length > 0) {
+      buffer = g_queue_pop_head (src->video_queue);
+      GST_LOG_OBJECT (src, "dropping buffer %p", buffer);
+      gst_buffer_unref (buffer);
+    }
+
+    g_mutex_unlock (&src->video_lock);
+
     gst_pad_pause_task (src->vidsrc);
 
     GST_ELEMENT_ERROR (src, STREAM, FAILED,
@@ -317,11 +336,10 @@ push_buffer:
         ("streaming task paused, reason %s (%d)", gst_flow_get_name (ret),
             ret));
 
-    GST_DEBUG_OBJECT (src, "performing EOS on video branch");
-    if (!gst_pad_push_event (src->vidsrc, gst_event_new_eos ())) {
-      GST_WARNING_OBJECT (src, "failed to send EOS to video branch");
-    }
-
+    /* We really need all elements to release the buffers. */
+    gst_pad_push_event (src->vidsrc, gst_event_new_flush_start ());
+    gst_pad_push_event (src->vidsrc, gst_event_new_flush_stop ());
+    gst_pad_push_event (src->vidsrc, gst_event_new_eos ());
   }
 
   return;
@@ -339,8 +357,9 @@ stop_recording:
   g_cond_signal (&src->video_capture_status_cond);
   g_mutex_unlock (&src->video_capture_status_lock);
 
-  if (src->video_queue->length > 0) {
+  while (src->video_queue->length > 0) {
     buffer = g_queue_pop_head (src->video_queue);
+    GST_LOG_OBJECT (src, "dropping buffer %p", buffer);
     gst_buffer_unref (buffer);
   }
 

@@ -703,6 +703,16 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
 
   switch (transition) {
     case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+      g_mutex_lock (&src->capturing_mutex);
+
+      if (src->mode == MODE_VIDEO && src->capturing) {
+        GST_WARNING_OBJECT (src, "video capture still running running");
+        g_mutex_unlock (&src->capturing_mutex);
+        gst_droid_cam_src_stop_video_capture (src);
+      } else {
+        g_mutex_unlock (&src->capturing_mutex);
+      }
+
       gst_droid_cam_src_stop_pipeline (src);
       no_preroll = TRUE;
       break;
@@ -1213,7 +1223,8 @@ gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
   GST_LOG_OBJECT (src, "video_capture_status is now %i",
       src->video_capture_status);
 
-  g_assert (src->video_capture_status == VIDEO_CAPTURE_STOPPED);
+  g_assert (src->video_capture_status == VIDEO_CAPTURE_STOPPED
+      || src->video_capture_status == VIDEO_CAPTURE_ERROR);
 
   g_mutex_unlock (&src->video_capture_status_lock);
 
@@ -1422,7 +1433,8 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
   GST_LOG_OBJECT (src, "received video data %p of size %i", video_data, size);
 
   g_mutex_lock (&src->video_capture_status_lock);
-  if (src->video_capture_status > VIDEO_CAPTURE_RUNNING) {
+  if (src->video_capture_status > VIDEO_CAPTURE_RUNNING
+      || src->video_capture_status == VIDEO_CAPTURE_ERROR) {
     drop_buffer = TRUE;
   }
 
