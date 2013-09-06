@@ -991,8 +991,17 @@ gst_droid_cam_src_stop_capture (GstDroidCamSrc * src)
     GST_DEBUG_OBJECT (src, "stop capture not needed for image mode");
     return;
   } else if (src->mode == MODE_VIDEO) {
+    g_mutex_lock (&src->capturing_mutex);
+    if (!src->capturing) {
+      g_mutex_unlock (&src->capturing_mutex);
+      GST_WARNING_OBJECT (src, "video capture not running");
+      return;
+    }
+
+    g_mutex_unlock (&src->capturing_mutex);
+
     gst_droid_cam_src_stop_video_capture (src);
-    /* videosrc loop() function will take care of updating ready-for-capture */
+
   } else {
     g_assert_not_reached ();
   }
