@@ -308,7 +308,7 @@ push_buffer:
     g_mutex_unlock (&src->video_capture_status_lock);
   }
 
-  GST_DEBUG_OBJECT (src, "pushing buffer %p", buffer);
+  GST_LOG_OBJECT (src, "pushing buffer %p", buffer);
 
   ret = gst_pad_push (src->vidsrc, buffer);
 

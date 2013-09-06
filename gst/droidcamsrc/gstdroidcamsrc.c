@@ -1474,6 +1474,8 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
   GST_BUFFER_MALLOCDATA (buff) = (gpointer) malloc_data;
   GST_BUFFER_FREE_FUNC (buff) = gst_droid_cam_src_free_video_buffer;
 
+  GST_LOG_OBJECT (src, "added buffer %p", buff);
+
   g_mutex_lock (&src->video_lock);
   g_queue_push_tail (src->video_queue, buff);
   g_cond_signal (&src->video_cond);
@@ -1584,7 +1586,7 @@ gst_droid_cam_src_free_video_buffer (gpointer data)
   GstDroidCamSrc *src = malloc_data->src;
   GstBuffer *buffer = malloc_data->buffer;
 
-  GST_DEBUG_OBJECT (src, "free video buffer");
+  GST_LOG_OBJECT (src, "free video buffer %p", buffer);
 
   src->dev->ops->release_recording_frame (src->dev, GST_BUFFER_DATA (buffer));
 
