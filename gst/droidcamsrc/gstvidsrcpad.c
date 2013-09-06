@@ -312,14 +312,19 @@ push_buffer:
 
   ret = gst_pad_push (src->vidsrc, buffer);
 
-  if (ret == GST_FLOW_UNEXPECTED) {
-    /* Nothing */
-    GST_WARNING_OBJECT (src, "GST_FLOW_UNEXPECTED while pushing buffer");
-  } else if (ret == GST_FLOW_NOT_LINKED || ret <= GST_FLOW_UNEXPECTED) {
+  if (ret != GST_FLOW_OK) {
+    gst_pad_pause_task (src->vidsrc);
+
     GST_ELEMENT_ERROR (src, STREAM, FAILED,
         ("Internal data flow error."),
         ("streaming task paused, reason %s (%d)", gst_flow_get_name (ret),
             ret));
+
+    GST_DEBUG_OBJECT (src, "performing EOS on video branch");
+    if (!gst_pad_push_event (src->vidsrc, gst_event_new_eos ())) {
+      GST_WARNING_OBJECT (src, "failed to send EOS to video branch");
+    }
+
   }
 
   return;
