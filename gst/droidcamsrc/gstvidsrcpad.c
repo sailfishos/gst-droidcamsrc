@@ -218,15 +218,19 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   GstFlowReturn ret;
   gboolean stop_recording = FALSE;
   gboolean send_new_segment = FALSE;
-  gboolean not_recording = FALSE;
 
   GST_DEBUG_OBJECT (src, "loop");
 
+  /* TODO: caps renegotiation */
   g_mutex_lock (&src->video_lock);
+  if (!src->video_task_running) {
+    g_mutex_unlock (&src->video_lock);
 
-  if (src->video_renegotiate) {
-    /* TODO: handle renegotiation */
+    GST_DEBUG_OBJECT (src, "task not running");
+    return;
   }
+
+  g_cond_wait (&src->video_cond, &src->video_lock);
 
   if (!src->video_task_running) {
     g_mutex_unlock (&src->video_lock);
@@ -240,6 +244,7 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
 
   switch (src->video_capture_status) {
     case VIDEO_CAPTURE_ERROR:
+    case VIDEO_CAPTURE_STOPPED:
       g_assert_not_reached ();
       break;
 
@@ -253,51 +258,16 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
     case VIDEO_CAPTURE_STOPPING:
       stop_recording = TRUE;
       break;
-
-    case VIDEO_CAPTURE_STOPPED:
-      not_recording = TRUE;
-      break;
   }
 
   g_mutex_unlock (&src->video_capture_status_lock);
-
-  if (not_recording) {
-    GST_LOG_OBJECT (src, "Recording not running.");
-  }
 
   if (stop_recording) {
     goto stop_recording;
   }
 
-  if (src->video_queue->length > 0) {
-    buffer = g_queue_pop_head (src->video_queue);
-    g_mutex_unlock (&src->video_lock);
-
-    goto push_buffer;
-  }
-
-  g_cond_wait (&src->video_cond, &src->video_lock);
-
-  if (!src->video_task_running) {
-    g_mutex_unlock (&src->video_lock);
-
-    GST_DEBUG_OBJECT (src, "task not running");
-
-    return;
-  }
-
   buffer = g_queue_pop_head (src->video_queue);
   g_mutex_unlock (&src->video_lock);
-
-push_buffer:
-  if (!buffer) {
-    /* This simply means that we are stopping recording
-     * and our cond was signalled. We will not do anything now
-     * but we should properly stop recording next time _loop () gets called
-     */
-    GST_DEBUG_OBJECT (src, "empty buffer. Not doing anything");
-    return;
-  }
 
   if (send_new_segment && !klass->open_segment (src, src->vidsrc)) {
     GST_WARNING_OBJECT (src, "failed to push new segment");
