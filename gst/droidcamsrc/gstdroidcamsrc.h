@@ -60,11 +60,12 @@ G_BEGIN_DECLS
 
 #define GST_DROID_CAM_SRC_VIDEO_CAPS_NAME  "video/x-raw-data"
 
-#define VIDEO_CAPTURE_STARTING          0
-#define VIDEO_CAPTURE_RUNNING           1
-#define VIDEO_CAPTURE_STOPPING          2
-#define VIDEO_CAPTURE_STOPPED           3
-#define VIDEO_CAPTURE_DONE              4
+typedef enum {
+  VIDEO_CAPTURE_STARTING = 0,
+  VIDEO_CAPTURE_RUNNING = 1,
+  VIDEO_CAPTURE_STOPPING = 2,
+  VIDEO_CAPTURE_STOPPED = 3,
+} VideoCaptureStatus;
 
 #define GST_DROID_CAM_SRC_CAPTURE_START "photo-capture-start"
 #define GST_DROID_CAM_SRC_CAPTURE_END "photo-capture-end"
@@ -124,7 +125,7 @@ struct _GstDroidCamSrc {
   GMutex video_capture_status_lock;
   GCond video_capture_status_cond;
 
-  int video_capture_status;
+  VideoCaptureStatus video_capture_status;
 
   int num_video_frames;
 

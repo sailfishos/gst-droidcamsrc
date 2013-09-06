@@ -253,9 +253,6 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
     case VIDEO_CAPTURE_STOPPED:
       not_recording = TRUE;
       break;
-
-    case VIDEO_CAPTURE_DONE:
-      break;
   }
 
   g_mutex_unlock (&src->video_capture_status_lock);

@@ -297,7 +297,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   g_mutex_init (&src->pushed_video_frames_lock);
   g_cond_init (&src->pushed_video_frames_cond);
 
-  src->video_capture_status = VIDEO_CAPTURE_DONE;
+  src->video_capture_status = VIDEO_CAPTURE_STOPPED;
   g_mutex_init (&src->video_capture_status_lock);
   g_cond_init (&src->video_capture_status_cond);
 
