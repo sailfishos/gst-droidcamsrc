@@ -213,7 +213,6 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
 {
   GstPad *pad = (GstPad *) data;
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (GST_OBJECT_PARENT (pad));
-  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
   GstBuffer *buffer;
   GstFlowReturn ret;
   gboolean stop_recording = FALSE;
@@ -269,11 +268,13 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   buffer = g_queue_pop_head (src->video_queue);
   g_mutex_unlock (&src->video_lock);
 
-  if (send_new_segment && !klass->open_segment (src, src->vidsrc)) {
-    GST_WARNING_OBJECT (src, "failed to push new segment");
-  }
-
   if (send_new_segment) {
+    if (!gst_pad_push_event (src->vidsrc, gst_event_new_new_segment (FALSE, 1.0,
+                GST_FORMAT_TIME, 0, -1, 0))) {
+      /* TODO: send an error and stop task? */
+      GST_WARNING_OBJECT (src, "failed to push new segment");
+    }
+
     g_mutex_lock (&src->video_capture_status_lock);
     src->video_capture_status = VIDEO_CAPTURE_RUNNING;
     g_mutex_unlock (&src->video_capture_status_lock);
