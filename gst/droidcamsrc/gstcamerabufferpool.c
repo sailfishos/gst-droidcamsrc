@@ -634,19 +634,11 @@ gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
 {
   GST_DEBUG_OBJECT (pool, "finalize");
 
-  while (pool->buffers->len > 0) {
-    GstNativeBuffer *buffer = g_ptr_array_index (pool->buffers, 0);
-    GST_DEBUG_OBJECT (pool, "free buffer %p", buffer);
-
-    /* We will not free the buffer for now.
-     * It will be freed whenever its reference count drops to 0 */
-    gst_native_buffer_set_finalize_callback (buffer,
-        gst_camera_buffer_pool_free_buffer, pool);
-
-    g_ptr_array_remove (pool->buffers, buffer);
-
-    gst_buffer_unref (GST_BUFFER (buffer));
+  while (pool->hal_queue->length) {
+    g_queue_pop_head (pool->hal_queue);
   }
+
+  gst_camera_buffer_pool_clear (pool);
 
   g_ptr_array_free (pool->buffers, TRUE);
 
@@ -696,4 +688,43 @@ gst_camera_buffer_pool_drain_app_queue (GstCameraBufferPool * pool)
   g_mutex_unlock (&pool->app_lock);
 
   GST_DEBUG_OBJECT (pool, "popped %d buffers from app queue", count);
+}
+
+void
+gst_camera_buffer_pool_clear (GstCameraBufferPool * pool)
+{
+  int len;
+  int x;
+
+  g_assert (pool->app_queue->length == 0);
+
+  GST_DEBUG_OBJECT (pool, "clear");
+
+  GST_CAMERA_BUFFER_POOL_LOCK (pool);
+
+  len = pool->buffers->len;
+
+  for (x = len - 1; x >= 0; x--) {
+    GstNativeBuffer *buffer = g_ptr_array_index (pool->buffers, x);
+    GstBuffer *buff = GST_BUFFER (buffer);
+
+    gst_buffer_ref (buff);
+
+    /* We will only free buffers if they are not in hal queue. */
+
+    if (g_queue_find (pool->hal_queue, buffer)) {
+      GST_DEBUG_OBJECT (pool, "will not free buffer %p", buffer);
+    } else {
+      GST_DEBUG_OBJECT (pool, "free buffer %p", buffer);
+
+      gst_native_buffer_set_finalize_callback (buffer,
+          gst_camera_buffer_pool_free_buffer, pool);
+
+      g_ptr_array_remove (pool->buffers, buffer);
+    }
+
+    gst_buffer_unref (buff);
+  }
+
+  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 }

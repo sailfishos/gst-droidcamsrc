@@ -1028,28 +1028,12 @@ gst_droid_cam_src_flush_buffers (GstDroidCamSrc * src)
   GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
 
   gst_camera_buffer_pool_unlock_app_queue (src->pool);
+
   /* task has been paused by now */
   GST_PAD_STREAM_LOCK (src->vfsrc);
   GST_PAD_STREAM_UNLOCK (src->vfsrc);
 
-  if (!gst_pad_push_event (src->vfsrc, gst_event_new_flush_start ())) {
-    GST_WARNING_OBJECT (src, "failed to push flush start event");
-    return FALSE;
-  }
-
-  GST_PAD_STREAM_LOCK (src->vfsrc);
-
-  if (!gst_pad_push_event (src->vfsrc, gst_event_new_flush_stop ())) {
-    GST_WARNING_OBJECT (src, "failed to push flush stop event");
-    return FALSE;
-  }
-
-  GST_PAD_STREAM_UNLOCK (src->vfsrc);
-
   gst_pad_stop_task (src->vfsrc);
-
-  /* We will have to send a new segment event */
-  src->send_new_segment = TRUE;
 
   /* clear any pending events */
   GST_OBJECT_LOCK (src);
@@ -1058,6 +1042,7 @@ gst_droid_cam_src_flush_buffers (GstDroidCamSrc * src)
   GST_OBJECT_UNLOCK (src);
 
   gst_camera_buffer_pool_drain_app_queue (src->pool);
+  gst_camera_buffer_pool_clear (src->pool);
 
   return TRUE;
 }

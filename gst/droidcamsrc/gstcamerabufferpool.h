@@ -99,7 +99,7 @@ GstCameraBufferPool *gst_camera_buffer_pool_new (GstElement * src, GstGralloc * 
 void gst_camera_buffer_pool_unlock_hal_queue (GstCameraBufferPool * pool);
 void gst_camera_buffer_pool_unlock_app_queue (GstCameraBufferPool * pool);
 void gst_camera_buffer_pool_drain_app_queue (GstCameraBufferPool * pool);
-
+void gst_camera_buffer_pool_clear (GstCameraBufferPool * pool);
 G_INLINE_FUNC GstCameraBufferPool *gst_camera_buffer_pool_ref (GstCameraBufferPool * pool);
 G_INLINE_FUNC void gst_camera_buffer_pool_unref (GstCameraBufferPool * pool);
 
