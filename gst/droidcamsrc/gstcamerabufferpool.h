@@ -50,6 +50,7 @@ struct _GstCameraBufferPool {
   GMutex lock;
 
   GPtrArray *buffers;
+  GMutex buffers_lock;
 
   /* Queue for HAL */
   GQueue *hal_queue;
