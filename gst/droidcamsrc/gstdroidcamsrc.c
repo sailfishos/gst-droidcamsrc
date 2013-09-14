@@ -1155,7 +1155,7 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
     return FALSE;
   }
 
-  GST_LOG_OBJECT (src, "done");
+  GST_DEBUG_OBJECT (src, "done");
 
   return TRUE;
 
