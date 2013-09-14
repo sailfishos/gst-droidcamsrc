@@ -1113,6 +1113,18 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
     return FALSE;
   }
 
+  src->dev->ops->stop_preview (src->dev);
+  gst_camera_buffer_pool_clear (src->pool);
+  err = src->dev->ops->start_preview (src->dev);
+  if (err != 0) {
+    GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("Could not start camera: %d", err),
+        (NULL));
+    GST_WARNING_OBJECT (src, "failed to start preview: %d", err);
+
+    ret = FALSE;
+    goto out;
+  }
+
   GST_DEBUG_OBJECT (src, "setting metadata storage in video buffers to %i",
       src->video_metadata);
   err =
