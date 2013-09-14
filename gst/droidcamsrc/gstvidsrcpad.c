@@ -269,6 +269,7 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   g_mutex_unlock (&src->video_lock);
 
   if (send_new_segment) {
+    GST_DEBUG_OBJECT (src, "sending new segment");
     if (!gst_pad_push_event (src->vidsrc, gst_event_new_new_segment (FALSE, 1.0,
                 GST_FORMAT_TIME, 0, -1, 0))) {
       /* TODO: send an error and stop task? */
