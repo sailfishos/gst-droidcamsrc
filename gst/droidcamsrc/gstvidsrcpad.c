@@ -271,7 +271,7 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   if (send_new_segment) {
     GST_DEBUG_OBJECT (src, "sending new segment");
     if (!gst_pad_push_event (src->vidsrc, gst_event_new_new_segment (FALSE, 1.0,
-                GST_FORMAT_TIME, 0, -1, 0))) {
+                GST_FORMAT_TIME, GST_BUFFER_TIMESTAMP (buffer), -1, 0))) {
       /* TODO: send an error and stop task? */
       GST_WARNING_OBJECT (src, "failed to push new segment");
     }
