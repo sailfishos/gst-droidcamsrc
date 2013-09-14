@@ -701,6 +701,7 @@ gst_camera_buffer_pool_clear (GstCameraBufferPool * pool)
   GST_DEBUG_OBJECT (pool, "clear");
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
+  g_mutex_lock (&pool->hal_lock);
 
   len = pool->buffers->len;
 
@@ -726,5 +727,6 @@ gst_camera_buffer_pool_clear (GstCameraBufferPool * pool)
     gst_buffer_unref (buff);
   }
 
+  g_mutex_unlock (&pool->hal_lock);
   GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 }
