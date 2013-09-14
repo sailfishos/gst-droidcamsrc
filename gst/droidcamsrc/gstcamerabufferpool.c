@@ -292,7 +292,12 @@ gst_camera_buffer_pool_set_crop (struct preview_stream_ops *w, int left,
 
   GST_DEBUG_OBJECT (pool, "set crop");
 
-  if (pool->left != 0 || pool->top != 0 || pool->right != 0
+  if (pool->left == left && pool->right == right && pool->top == top
+      && pool->bottom == bottom) {
+    GST_DEBUG_OBJECT (pool, "same crop. Nothing to do");
+    GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+    return 0;
+  } else if (pool->left != 0 || pool->top != 0 || pool->right != 0
       || pool->bottom != 0) {
     GST_WARNING_OBJECT (pool, "crop previously set");
 
