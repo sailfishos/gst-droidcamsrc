@@ -106,8 +106,28 @@ gst_camera_buffer_pool_free_buffer (void *data, GstNativeBuffer * buffer)
 static gboolean
 gst_camera_buffer_pool_resurrect_buffer (void *data, GstNativeBuffer * buffer)
 {
+  int len;
+  int x;
+  gboolean found = FALSE;
   GstCameraBufferPool *pool = (GstCameraBufferPool *) data;
+
   GST_DEBUG_OBJECT (pool, "resurrect buffer");
+
+  /* If the buffer has been removed from our buffers then we destroy it */
+  g_mutex_lock (&pool->buffers_lock);
+  len = pool->buffers->len;
+  for (x = 0; x < len; x++) {
+    if (g_ptr_array_index (pool->buffers, x) == buffer) {
+      found = TRUE;
+    }
+  }
+
+  g_mutex_unlock (&pool->buffers_lock);
+
+  if (!found) {
+    GST_INFO_OBJECT (pool, "destroying buffer %p", buffer);
+    return gst_camera_buffer_pool_free_buffer (pool, buffer);
+  }
 
   gst_buffer_ref (GST_BUFFER (buffer));
 
@@ -124,6 +144,7 @@ gst_camera_buffer_pool_resurrect_buffer (void *data, GstNativeBuffer * buffer)
   return TRUE;
 }
 
+/* with buffers_lock */
 static gboolean
 gst_camera_buffer_pool_allocate_and_add_unlocked (GstCameraBufferPool * pool)
 {
@@ -271,7 +292,12 @@ gst_camera_buffer_pool_set_crop (struct preview_stream_ops *w, int left,
 
   GST_DEBUG_OBJECT (pool, "set crop");
 
-  if (pool->left != 0 || pool->top != 0 || pool->right != 0
+  if (pool->left == left && pool->right == right && pool->top == top
+      && pool->bottom == bottom) {
+    GST_DEBUG_OBJECT (pool, "same crop. Nothing to do");
+    GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
+    return 0;
+  } else if (pool->left != 0 || pool->top != 0 || pool->right != 0
       || pool->bottom != 0) {
     GST_WARNING_OBJECT (pool, "crop previously set");
 
@@ -379,12 +405,15 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
+  g_mutex_lock (&pool->buffers_lock);
   while (pool->buffers->len < pool->count) {
     if (!gst_camera_buffer_pool_allocate_and_add_unlocked (pool)) {
       GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
       return -ENOMEM;
     }
   }
+
+  g_mutex_unlock (&pool->buffers_lock);
 
   GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 
@@ -433,6 +462,7 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
   return 0;
 }
 
+/* with pool lock */
 static void
 gst_camera_buffer_pool_set_buffer_metadata (GstCameraBufferPool * pool,
     GstNativeBuffer * buffer)
@@ -441,19 +471,14 @@ gst_camera_buffer_pool_set_buffer_metadata (GstCameraBufferPool * pool,
 
   GST_DEBUG_OBJECT (pool, "set buffer metadata");
 
-  GST_CAMERA_BUFFER_POOL_LOCK (pool);
-
   GST_BUFFER_OFFSET (buff) = pool->frames++;
   GST_BUFFER_OFFSET_END (buff) = pool->frames;
 
   /* TODO: We don't know how the timestamp format really is.
      This assertion is there until we get Android HAL which sends timestamp
      and we know what to do with it. */
-  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 
   g_return_if_fail (pool->last_timestamp == 0);
-
-  GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
   if (!pool->last_timestamp) {
     GstClock *clock;
@@ -486,8 +511,6 @@ gst_camera_buffer_pool_set_buffer_metadata (GstCameraBufferPool * pool,
   }
 
   GST_BUFFER_DURATION (buff) = pool->buffer_duration;
-
-  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 }
 
 static int
@@ -496,15 +519,12 @@ gst_camera_buffer_pool_enqueue_buffer (struct preview_stream_ops *w,
 {
   GstCameraBufferPool *pool = gst_camera_buffer_pool_get (w);
   GstNativeBuffer *buff = gst_camera_buffer_pool_get_buffer (buffer);
-  gboolean flushing;
 
   GST_DEBUG_OBJECT (pool, "enqueue buffer %p", buff);
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
-  flushing = pool->flushing;
-  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 
-  if (flushing) {
+  if (pool->flushing) {
     GST_DEBUG_OBJECT (pool,
         "pool is flushing. Pushing buffer %p back to camera HAL", buff);
 
@@ -530,6 +550,8 @@ gst_camera_buffer_pool_enqueue_buffer (struct preview_stream_ops *w,
 
     g_mutex_unlock (&pool->app_lock);
   }
+
+  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 
   return 0;
 }
@@ -605,6 +627,7 @@ gst_camera_buffer_pool_init (GstCameraBufferPool * pool)
   g_mutex_init (&pool->lock);
 
   pool->buffers = g_ptr_array_new ();
+  g_mutex_init (&pool->buffers_lock);
 
   pool->hal_queue = g_queue_new ();
   g_mutex_init (&pool->hal_lock);
@@ -634,21 +657,15 @@ gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
 {
   GST_DEBUG_OBJECT (pool, "finalize");
 
-  while (pool->buffers->len > 0) {
-    GstNativeBuffer *buffer = g_ptr_array_index (pool->buffers, 0);
-    GST_DEBUG_OBJECT (pool, "free buffer %p", buffer);
-
-    /* We will not free the buffer for now.
-     * It will be freed whenever its reference count drops to 0 */
-    gst_native_buffer_set_finalize_callback (buffer,
-        gst_camera_buffer_pool_free_buffer, pool);
-
-    g_ptr_array_remove (pool->buffers, buffer);
-
-    gst_buffer_unref (GST_BUFFER (buffer));
+  while (pool->hal_queue->length) {
+    g_queue_pop_head (pool->hal_queue);
   }
 
+  gst_camera_buffer_pool_clear (pool);
+
   g_ptr_array_free (pool->buffers, TRUE);
+
+  g_mutex_clear (&pool->buffers_lock);
 
   g_mutex_clear (&pool->hal_lock);
   g_cond_clear (&pool->hal_cond);
@@ -696,4 +713,47 @@ gst_camera_buffer_pool_drain_app_queue (GstCameraBufferPool * pool)
   g_mutex_unlock (&pool->app_lock);
 
   GST_DEBUG_OBJECT (pool, "popped %d buffers from app queue", count);
+}
+
+void
+gst_camera_buffer_pool_clear (GstCameraBufferPool * pool)
+{
+  int len;
+  int x;
+
+  g_assert (pool->app_queue->length == 0);
+
+  GST_DEBUG_OBJECT (pool, "clear");
+
+  GST_CAMERA_BUFFER_POOL_LOCK (pool);
+  g_mutex_lock (&pool->hal_lock);
+  g_mutex_lock (&pool->buffers_lock);
+
+  len = pool->buffers->len;
+
+  for (x = len - 1; x >= 0; x--) {
+    GstNativeBuffer *buffer = g_ptr_array_index (pool->buffers, x);
+    GstBuffer *buff = GST_BUFFER (buffer);
+
+    gst_buffer_ref (buff);
+
+    /* We will only free buffers if they are not in hal queue. */
+
+    if (g_queue_find (pool->hal_queue, buffer)) {
+      GST_DEBUG_OBJECT (pool, "will not free buffer %p", buffer);
+    } else {
+      GST_DEBUG_OBJECT (pool, "free buffer %p", buffer);
+
+      gst_native_buffer_set_finalize_callback (buffer,
+          gst_camera_buffer_pool_free_buffer, pool);
+
+      g_ptr_array_remove (pool->buffers, buffer);
+    }
+
+    gst_buffer_unref (buff);
+  }
+
+  g_mutex_unlock (&pool->buffers_lock);
+  g_mutex_unlock (&pool->hal_lock);
+  GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
 }
