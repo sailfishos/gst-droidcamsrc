@@ -355,6 +355,8 @@ gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on)
   switch (mode) {
     case GST_PHOTOGRAPHY_FOCUS_MODE_AUTO:
     case GST_PHOTOGRAPHY_FOCUS_MODE_MACRO:
+    case GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_NORMAL:
+    case GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_EXTENDED:
       break;
 
     default:
