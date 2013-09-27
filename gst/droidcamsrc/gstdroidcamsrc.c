@@ -136,7 +136,7 @@ static void gst_droid_cam_src_free_video_buffer (gpointer data);
 static void gst_droid_cam_src_send_capture_start (GstDroidCamSrc * src);
 static void gst_droid_cam_src_send_capture_end (GstDroidCamSrc * src);
 static void gst_droid_cam_src_boilerplate_init (GType type);
-static void gst_droid_cam_src_send_focus_message (GstDroidCamSrc * src,
+static void gst_droid_cam_src_send_message (GstDroidCamSrc * src,
     const gchar * msg_name, int status);
 
 GST_BOILERPLATE_FULL (GstDroidCamSrc, gst_droid_cam_src, GstBin,
@@ -1522,11 +1522,11 @@ gst_droid_cam_src_notify_callback (int32_t msg_type,
 
     case CAMERA_MSG_FOCUS:
       if (ext1) {
-        gst_droid_cam_src_send_focus_message (src,
+        gst_droid_cam_src_send_message (src,
             GST_PHOTOGRAPHY_AUTOFOCUS_DONE,
             GST_PHOTOGRAPHY_FOCUS_STATUS_SUCCESS);
       } else {
-        gst_droid_cam_src_send_focus_message (src,
+        gst_droid_cam_src_send_message (src,
             GST_PHOTOGRAPHY_AUTOFOCUS_DONE, GST_PHOTOGRAPHY_FOCUS_STATUS_FAIL);
       }
 
@@ -1540,11 +1540,11 @@ gst_droid_cam_src_notify_callback (int32_t msg_type,
 #if 0
       if (ext1) {
         /* focus starts to move */
-        gst_droid_cam_src_send_focus_message (src,
+        gst_droid_cam_src_send_message (src,
             "caf-update", GST_PHOTOGRAPHY_FOCUS_STATUS_RUNNING);
       } else {
         /* Focus stopped moving so it must be success */
-        gst_droid_cam_src_send_focus_message (src,
+        gst_droid_cam_src_send_message (src,
             "caf-update", GST_PHOTOGRAPHY_FOCUS_STATUS_SUCCESS);
       }
 #endif
@@ -1716,13 +1716,13 @@ gst_droid_cam_src_stop_autofocus (GstDroidCamSrc * src)
 }
 
 static void
-gst_droid_cam_src_send_focus_message (GstDroidCamSrc * src,
+gst_droid_cam_src_send_message (GstDroidCamSrc * src,
     const gchar * msg_name, int status)
 {
   GstStructure *s;
   GstMessage *msg;
 
-  GST_DEBUG_OBJECT (src, "send focus message %s %d", msg_name, status);
+  GST_DEBUG_OBJECT (src, "send message %s %d", msg_name, status);
 
   s = gst_structure_new (msg_name, "status", G_TYPE_INT, status, NULL);
   msg = gst_message_new_element (GST_OBJECT (src), s);
