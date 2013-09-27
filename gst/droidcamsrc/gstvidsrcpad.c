@@ -218,7 +218,7 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
   gboolean stop_recording = FALSE;
   gboolean send_new_segment = FALSE;
 
-  GST_DEBUG_OBJECT (src, "loop");
+  GST_LOG_OBJECT (src, "loop");
 
   /* TODO: caps renegotiation */
   g_mutex_lock (&src->video_lock);
@@ -460,7 +460,7 @@ gst_droid_cam_src_vidsrc_query (GstPad * pad, GstQuery * query)
     return FALSE;
   }
 
-  GST_DEBUG_OBJECT (parent, "vidsrc query");
+  GST_DEBUG_OBJECT (parent, "vidsrc query %" GST_PTR_FORMAT, query);
 
   parent_class = GST_ELEMENT_GET_CLASS (parent);
   ret = parent_class->query (parent, query);

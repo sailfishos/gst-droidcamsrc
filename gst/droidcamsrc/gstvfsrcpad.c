@@ -288,7 +288,7 @@ gst_droid_cam_src_vfsrc_loop (gpointer data)
   GstFlowReturn ret;
   GList *events = NULL;
 
-  GST_DEBUG_OBJECT (src, "loop");
+  GST_LOG_OBJECT (src, "loop");
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
@@ -310,9 +310,9 @@ gst_droid_cam_src_vfsrc_loop (gpointer data)
     goto push_buffer;
   }
 
-  GST_DEBUG_OBJECT (src, "empty app queue. waiting for buffer");
+  GST_LOG_OBJECT (src, "empty app queue. waiting for buffer");
   g_cond_wait (&pool->app_cond, &pool->app_lock);
-  GST_DEBUG_OBJECT (src, "done waiting for buffer");
+  GST_LOG_OBJECT (src, "done waiting for buffer");
 
   if (pool->app_queue->length == 0) {
     /* pool is flushing. */
