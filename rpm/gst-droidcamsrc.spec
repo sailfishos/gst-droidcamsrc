@@ -11,8 +11,10 @@ BuildRequires:  pkgconfig(gstreamer-plugins-base-0.10)
 BuildRequires:  pkgconfig(gstreamer-video-0.10)
 BuildRequires:  pkgconfig(gstreamer-plugins-bad-free-0.10)
 BuildRequires:  pkgconfig(gstreamer-pbutils-0.10)
+BuildRequires:  pkgconfig(gstreamer-tag-0.10)
 BuildRequires:  pkgconfig(libhardware)
 BuildRequires:  pkgconfig(libgstnativebuffer)
+BuildRequires:  pkgconfig(libexif)
 
 %description
 GStreamer source for Android camera hal

@@ -28,6 +28,7 @@ PKG_CHECK_MODULES(GST, [
   gstreamer-video-0.10 >= $GST_REQUIRED
   gstreamer-plugins-bad-free-0.10 >= $GST_REQUIRED
   gstreamer-pbutils-0.10 >= $GST_REQUIRED
+  gstreamer-tag-0.10 >= $GST_REQUIRED
 ], [
   AC_SUBST(GST_CFLAGS)
   AC_SUBST(GST_LIBS)
@@ -49,6 +50,17 @@ PKG_CHECK_MODULES(DROID, [
 ], [
   AC_MSG_ERROR([
       android-headers package is missing
+  ])
+])
+
+PKG_CHECK_MODULES(EXIF, [
+  libexif
+], [
+  AC_SUBST(EXIF_CFLAGS)
+  AC_SUBST(EXIF_LIBS)
+], [
+  AC_MSG_ERROR([
+      libexif package is missing
   ])
 ])
 

@@ -20,6 +20,7 @@
 #include "gstimgsrcpad.h"
 #include "gstdroidcamsrc.h"
 #include "cameraparams.h"
+#include "exif.h"
 #include <gst/video/video.h>
 
 GST_DEBUG_CATEGORY_STATIC (droidimgsrc_debug);
@@ -209,6 +210,7 @@ gst_droid_cam_src_imgsrc_loop (gpointer data)
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
   GstBuffer *buffer;
   GstFlowReturn ret;
+  GstTagList *tags;
 
   GST_DEBUG_OBJECT (src, "loop");
 
@@ -252,7 +254,21 @@ push_buffer:
 
   klass->update_segment (src, buffer);
 
+  tags = gst_droid_cam_src_get_exif_tags (buffer);
+  if (!tags) {
+    GST_WARNING_OBJECT (src, "Failed to read exif tags from compressed JPEG");
+  }
+
   GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DISCONT);
+
+  if (tags) {
+    GstEvent *event = gst_event_new_tag (tags);
+    GST_DEBUG_OBJECT (src, "pushing tags %" GST_PTR_FORMAT, tags);
+    if (!gst_pad_push_event (src->imgsrc, event)) {
+      GST_WARNING_OBJECT (src, "Failed to push tags");
+    }
+  }
+
   ret = gst_pad_push (src->imgsrc, buffer);
 
   if (ret == GST_FLOW_UNEXPECTED) {
