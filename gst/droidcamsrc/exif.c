@@ -62,9 +62,22 @@ gst_droid_cam_src_get_exif_tags (GstBuffer * input)
   tags = gst_tag_list_from_exif_buffer_with_tiff_header (buffer);
 
   if (tags) {
+    ExifEntry *e = exif_content_get_entry (exif->ifd[EXIF_IFD_EXIF],
+        EXIF_TAG_ISO_SPEED_RATINGS);
+
     gst_tag_list_remove_tag (tags, GST_TAG_DEVICE_MANUFACTURER);
     gst_tag_list_remove_tag (tags, GST_TAG_DEVICE_MODEL);
     gst_tag_list_remove_tag (tags, GST_TAG_APPLICATION_NAME);
+    /*
+     * ISO seems to be dropped by gst_tag_list_from_exif_buffer_with_tiff_header ()
+     * since EEIF 2.3 makes a new mess out of exif tags.
+     * We eill behave as N9 does for now until we hit an iceberg :|
+     */
+    if (e) {
+      guint16 iso = exif_get_short (e->data, EXIF_BYTE_ORDER_MOTOROLA);
+      gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE,
+          GST_TAG_CAPTURING_ISO_SPEED, iso, NULL);
+    }
   }
 
 cleanup:
