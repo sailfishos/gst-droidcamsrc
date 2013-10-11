@@ -738,7 +738,6 @@ gst_camera_buffer_pool_clear (GstCameraBufferPool * pool)
     gst_buffer_ref (buff);
 
     /* We will only free buffers if they are not in hal queue. */
-
     if (g_queue_find (pool->hal_queue, buffer)) {
       GST_DEBUG_OBJECT (pool, "will not free buffer %p", buffer);
     } else {
@@ -748,6 +747,14 @@ gst_camera_buffer_pool_clear (GstCameraBufferPool * pool)
           gst_camera_buffer_pool_free_buffer, pool);
 
       g_ptr_array_remove (pool->buffers, buffer);
+
+      /*
+       * Unref the buffer so it gets destroyed.
+       * The assertion up there guarantees it's not in app queue
+       * and we check explicitly that it's not in HAL queue.
+       * It thus is safe to unref here.
+       */
+      gst_buffer_unref (buff);
     }
 
     gst_buffer_unref (buff);
