@@ -37,6 +37,7 @@ enum
   /* photography */
   PROP_FLASH_MODE,
   PROP_FOCUS_MODE,
+  PROP_WB_MODE,
 
   /* end */
   N_PROPS,

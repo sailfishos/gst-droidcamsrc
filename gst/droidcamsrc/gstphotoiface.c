@@ -61,6 +61,16 @@ static GstFocusMode _gst_photo_iface_get_focus_mode (GstDroidCamSrc * src);
 static gboolean _gst_photo_iface_set_focus_mode (GstDroidCamSrc * src,
     GstFocusMode focus, gboolean commit);
 
+/* White balance */
+static gboolean gst_photo_iface_get_white_balance_mode (GstPhotography * photo,
+    GstWhiteBalanceMode * wb);
+static gboolean gst_photo_iface_set_white_balance_mode (GstPhotography * photo,
+    GstWhiteBalanceMode wb);
+static GstWhiteBalanceMode _gst_photo_iface_get_white_balance_mode
+    (GstDroidCamSrc * src);
+static gboolean _gst_photo_iface_set_white_balance_mode (GstDroidCamSrc * src,
+    GstWhiteBalanceMode wb, gboolean commit);
+
 /* Auto focus */
 static void gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on);
 
@@ -108,8 +118,11 @@ gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
   iface->set_flash_mode = gst_photo_iface_set_flash_mode;
   iface->get_focus_mode = gst_photo_iface_get_focus_mode;
   iface->set_focus_mode = gst_photo_iface_set_focus_mode;
+  iface->get_white_balance_mode = gst_photo_iface_get_white_balance_mode;
+  iface->set_white_balance_mode = gst_photo_iface_set_white_balance_mode;
 
   iface->set_autofocus = gst_photo_iface_set_autofocus;
+
   // TODO: more
 }
 
@@ -121,6 +134,8 @@ gst_photo_iface_init_settings (GstDroidCamSrc * src)
   memset (&src->photo_settings, 0x0, sizeof (src->photo_settings));
   src->photo_settings.flash_mode = GST_PHOTOGRAPHY_FLASH_MODE_AUTO;
   src->photo_settings.focus_mode = GST_PHOTOGRAPHY_FOCUS_MODE_AUTO;
+  src->photo_settings.wb_mode = GST_PHOTOGRAPHY_WB_MODE_AUTO;
+
   // TODO: more
 }
 
@@ -133,6 +148,9 @@ gst_photo_iface_add_properties (GObjectClass * gobject_class)
   g_object_class_override_property (gobject_class, PROP_FOCUS_MODE,
       GST_PHOTOGRAPHY_PROP_FOCUS_MODE);
 
+  g_object_class_override_property (gobject_class, PROP_WB_MODE,
+      GST_PHOTOGRAPHY_PROP_WB_MODE);
+
   // TODO: more
 }
 
@@ -143,6 +161,8 @@ gst_photo_iface_settings_to_params (GstDroidCamSrc * src)
 
   _gst_photo_iface_set_flash_mode (src, src->photo_settings.flash_mode, FALSE);
   _gst_photo_iface_set_focus_mode (src, src->photo_settings.focus_mode, FALSE);
+  _gst_photo_iface_set_white_balance_mode (src, src->photo_settings.wb_mode,
+      FALSE);
   // TODO: more
 }
 
@@ -159,6 +179,9 @@ gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,
       g_value_set_enum (value, _gst_photo_iface_get_focus_mode (src));
       return TRUE;
 
+    case PROP_WB_MODE:
+      g_value_set_enum (value, _gst_photo_iface_get_white_balance_mode (src));
+      return TRUE;
   }
 
   // TODO: more
@@ -177,6 +200,11 @@ gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
 
     case PROP_FOCUS_MODE:
       _gst_photo_iface_set_focus_mode (src, g_value_get_enum (value), TRUE);
+      return TRUE;
+
+    case PROP_WB_MODE:
+      _gst_photo_iface_set_white_balance_mode (src, g_value_get_enum (value),
+          TRUE);
       return TRUE;
   }
 
@@ -340,6 +368,78 @@ void
 gst_photo_iface_update_focus_mode (GstDroidCamSrc * src)
 {
   _gst_photo_iface_set_focus_mode (src, src->photo_settings.focus_mode, TRUE);
+}
+
+static gboolean
+gst_photo_iface_get_white_balance_mode (GstPhotography * photo,
+    GstWhiteBalanceMode * wb)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_DEBUG_OBJECT (src, "get white balance mode");
+
+  *wb = _gst_photo_iface_get_white_balance_mode (src);
+
+  return TRUE;
+}
+
+static gboolean
+gst_photo_iface_set_white_balance_mode (GstPhotography * photo,
+    GstWhiteBalanceMode wb)
+{
+  return _gst_photo_iface_set_white_balance_mode (GST_DROID_CAM_SRC (photo), wb,
+      TRUE);
+}
+
+static GstWhiteBalanceMode _gst_photo_iface_get_white_balance_mode
+    (GstDroidCamSrc * src)
+{
+  GstWhiteBalanceMode wb;
+
+  GST_OBJECT_LOCK (src);
+
+  wb = src->photo_settings.wb_mode;
+
+  GST_DEBUG_OBJECT (src, "returning white balance mode %i", wb);
+
+  GST_OBJECT_UNLOCK (src);
+
+  return wb;
+}
+
+static gboolean
+_gst_photo_iface_set_white_balance_mode (GstDroidCamSrc * src,
+    GstWhiteBalanceMode wb, gboolean commit)
+{
+  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+
+  const char *val =
+      gst_droid_cam_src_find_droid (gst_droid_cam_src_white_balance_table, wb);
+
+  GST_DEBUG_OBJECT (src, "set white balance mode to %i (%s)", wb, val);
+
+  if (!val) {
+    return FALSE;
+  }
+
+  GST_DEBUG_OBJECT (src, "storing white balance mode %i", wb);
+
+  GST_OBJECT_LOCK (src);
+  src->photo_settings.wb_mode = wb;
+
+  if (!src->camera_params) {
+    GST_OBJECT_UNLOCK (src);
+    return TRUE;
+  }
+
+  camera_params_set (src->camera_params, "whitebalance", val);
+  GST_OBJECT_UNLOCK (src);
+
+  if (!commit) {
+    return TRUE;
+  }
+
+  return klass->set_camera_params (src);
 }
 
 static void

@@ -47,6 +47,15 @@ TableEntry gst_droid_cam_src_focus_table[] = {
   {NULL,   -1}
 };
 
+TableEntry gst_droid_cam_src_white_balance_table[] = {
+  {"auto",            GST_PHOTOGRAPHY_WB_MODE_AUTO},
+  {"incandescent",    GST_PHOTOGRAPHY_WB_MODE_TUNGSTEN},
+  {"fluorescent",     GST_PHOTOGRAPHY_WB_MODE_FLUORESCENT},
+  {"daylight",        GST_PHOTOGRAPHY_WB_MODE_DAYLIGHT},
+  {"cloudy-daylight", GST_PHOTOGRAPHY_WB_MODE_CLOUDY},
+  {NULL,              -1}
+};
+
 const char *gst_droid_cam_src_find_droid (TableEntry *entries, gint val) {
   int x = 0;
 
