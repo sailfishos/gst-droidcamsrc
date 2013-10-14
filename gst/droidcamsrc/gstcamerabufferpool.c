@@ -47,6 +47,8 @@ GST_DEBUG_CATEGORY_STATIC (droidcambufferpool_debug);
 #define container_of(ptr, type, member) ({ \
       const typeof( ((type *)0)->member ) *__mptr = (ptr); (type *)( (char *)__mptr - offsetof(type,member) );})
 
+#define GST_BUFFER_FLAG_PUSHED GST_BUFFER_FLAG_LAST
+
 static void
 gst_camera_buffer_pool_class_init (GstCameraBufferPoolClass * pool_class)
 {
@@ -109,8 +111,14 @@ gst_camera_buffer_pool_resurrect_buffer (void *data, GstNativeBuffer * buffer)
   int len;
   int x;
   gboolean found = FALSE;
+  gboolean ret = TRUE;
+
   GstCameraBufferPool *pool = (GstCameraBufferPool *) data;
 
+  /*
+   * We keep buffers_lock locked to make sure we don't hit a race condition
+   * if gst_camera_buffer_pool_clear() tries to ditch the same buffer.
+   */
   GST_DEBUG_OBJECT (pool, "resurrect buffer");
 
   /* If the buffer has been removed from our buffers then we destroy it */
@@ -122,14 +130,14 @@ gst_camera_buffer_pool_resurrect_buffer (void *data, GstNativeBuffer * buffer)
     }
   }
 
-  g_mutex_unlock (&pool->buffers_lock);
-
   if (!found) {
     GST_INFO_OBJECT (pool, "destroying buffer %p", buffer);
-    return gst_camera_buffer_pool_free_buffer (pool, buffer);
+    ret = gst_camera_buffer_pool_free_buffer (pool, buffer);
+    goto unlock_and_out;
   }
 
   gst_buffer_ref (GST_BUFFER (buffer));
+  GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_PUSHED);
 
   g_mutex_lock (&pool->hal_lock);
 
@@ -141,7 +149,10 @@ gst_camera_buffer_pool_resurrect_buffer (void *data, GstNativeBuffer * buffer)
 
   GST_DEBUG_OBJECT (pool, "resurrected buffer");
 
-  return TRUE;
+unlock_and_out:
+  g_mutex_unlock (&pool->buffers_lock);
+
+  return ret;
 }
 
 /* with buffers_lock */
@@ -544,6 +555,7 @@ gst_camera_buffer_pool_enqueue_buffer (struct preview_stream_ops *w,
 
     g_mutex_lock (&pool->app_lock);
 
+    GST_BUFFER_FLAG_SET (buff, GST_BUFFER_FLAG_PUSHED);
     g_queue_push_tail (pool->app_queue, buff);
 
     g_cond_signal (&pool->app_cond);
@@ -657,6 +669,8 @@ gst_camera_buffer_pool_finalize (GstCameraBufferPool * pool)
 {
   GST_DEBUG_OBJECT (pool, "finalize");
 
+  gst_camera_buffer_pool_drain_app_queue (pool);
+
   while (pool->hal_queue->length) {
     g_queue_pop_head (pool->hal_queue);
   }
@@ -697,6 +711,7 @@ gst_camera_buffer_pool_drain_app_queue (GstCameraBufferPool * pool)
 
   while (pool->app_queue->length > 0) {
     GstBuffer *buffer = g_queue_pop_head (pool->app_queue);
+    GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_PUSHED);
 
     GST_LOG_OBJECT (pool, "popped buffer %p", buffer);
 
@@ -754,7 +769,11 @@ gst_camera_buffer_pool_clear (GstCameraBufferPool * pool)
        * and we check explicitly that it's not in HAL queue.
        * It thus is safe to unref here.
        */
-      gst_buffer_unref (buff);
+      if (G_LIKELY (!GST_BUFFER_FLAG_IS_SET (buff, GST_BUFFER_FLAG_PUSHED))) {
+        gst_buffer_unref (buff);
+      } else {
+        GST_LOG_OBJECT (pool, "buffer %p is held by app", buff);
+      }
     }
 
     gst_buffer_unref (buff);
