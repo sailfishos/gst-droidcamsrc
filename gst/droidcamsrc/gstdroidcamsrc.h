@@ -30,6 +30,7 @@
 #include <gst/interfaces/photography.h>
 #undef GST_USE_UNSTABLE_API
 #endif /* GST_USE_UNSTABLE_API */
+#include "gstcamerasettings.h"
 
 G_BEGIN_DECLS
 
@@ -137,6 +138,8 @@ struct _GstDroidCamSrc {
 
   /* photography interface bits */
   GstPhotoSettings photo_settings;
+
+  GstCameraSettings *settings;
 };
 
 struct _GstDroidCamSrcClass {

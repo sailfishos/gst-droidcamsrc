@@ -10,7 +10,8 @@ libgstdroidcamsrc_la_SOURCES =  plugin.c \
 				gstimgsrcpad.c \
 				gstvidsrcpad.c \
 				gstphotoiface.c \
-				exif.c
+				exif.c \
+				gstcamerasettings.c
 
 libgstdroidcamsrc_la_CFLAGS = $(GST_CFLAGS) \
                               $(DROID_CFLAGS) \
@@ -39,4 +40,5 @@ noinst_HEADERS = gstdroidcamsrc.h \
 		 gstvidsrcpad.h \
 		 gstphotoiface.h \
 		 table.h \
-		 exif.h
+		 exif.h \
+		 gstcamerasettings.h
