@@ -30,5 +30,6 @@ typedef struct {
 
 GstCameraSettings *gst_camera_settings_new ();
 void gst_camera_settings_destroy (GstCameraSettings *settings);
+const char *gst_camera_settings_find_droid (GHashTable *table, int key);
 
 #endif /* __GST_CAMERA_SETTINGS_H__ */

@@ -30,7 +30,6 @@
 #endif /* GST_USE_UNSTABLE_API */
 #include "gstdroidcamsrc.h"
 #include "cameraparams.h"
-#include "table.h"
 
 GST_DEBUG_CATEGORY_STATIC (droidphoto_debug);
 #define GST_CAT_DEFAULT droidphoto_debug
@@ -255,7 +254,7 @@ _gst_photo_iface_set_flash_mode (GstDroidCamSrc * src, GstFlashMode flash,
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
 
   const char *val =
-      gst_droid_cam_src_find_droid (gst_droid_cam_src_flash_table, flash);
+      gst_camera_settings_find_droid (src->settings->flash_mode, flash);
 
   GST_DEBUG_OBJECT (src, "set flash mode to %i (%s)", flash, val);
 
@@ -325,7 +324,7 @@ _gst_photo_iface_set_focus_mode (GstDroidCamSrc * src,
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
 
   const char *val =
-      gst_droid_cam_src_find_droid (gst_droid_cam_src_focus_table, focus);
+      gst_camera_settings_find_droid (src->settings->focus_mode, focus);
 
   GST_DEBUG_OBJECT (src, "set focus mode to %i (%s)", focus, val);
 
@@ -414,7 +413,7 @@ _gst_photo_iface_set_white_balance_mode (GstDroidCamSrc * src,
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
 
   const char *val =
-      gst_droid_cam_src_find_droid (gst_droid_cam_src_white_balance_table, wb);
+      gst_camera_settings_find_droid (src->settings->white_balance_mode, wb);
 
   GST_DEBUG_OBJECT (src, "set white balance mode to %i (%s)", wb, val);
 
@@ -462,7 +461,7 @@ gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on)
     default:
       GST_WARNING_OBJECT (src,
           "Autofocus is not allowed with focus mode %d (%s)", mode,
-          gst_droid_cam_src_find_droid (gst_droid_cam_src_focus_table, mode));
+          gst_camera_settings_find_droid (src->settings->focus_mode, mode));
       break;
   }
 

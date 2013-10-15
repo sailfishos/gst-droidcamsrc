@@ -113,3 +113,24 @@ gst_camera_settings_load (GKeyFile * file, const char *group)
 
   return table;
 }
+
+const char *
+gst_camera_settings_find_droid (GHashTable * table, int key)
+{
+  char *val;
+  gboolean found;
+
+  if (!table) {
+    return NULL;
+  }
+
+  found =
+      g_hash_table_lookup_extended (table, GINT_TO_POINTER (key), NULL,
+      (gpointer *) & val);
+
+  if (found) {
+    return val;
+  }
+
+  return NULL;
+}

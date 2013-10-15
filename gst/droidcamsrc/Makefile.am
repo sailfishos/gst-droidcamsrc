@@ -39,6 +39,5 @@ noinst_HEADERS = gstdroidcamsrc.h \
 		 gstimgsrcpad.h \
 		 gstvidsrcpad.h \
 		 gstphotoiface.h \
-		 table.h \
 		 exif.h \
 		 gstcamerasettings.h
