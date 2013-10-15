@@ -274,7 +274,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->pool = NULL;
   src->camera_params = NULL;
   src->events = NULL;
-  src->settings = NULL;
+  src->settings = gst_camera_settings_new ();
 
   gst_segment_init (&src->segment, GST_FORMAT_TIME);
 
@@ -349,6 +349,9 @@ gst_droid_cam_src_finalize (GObject * object)
 
   g_mutex_clear (&src->video_capture_status_lock);
   g_cond_clear (&src->video_capture_status_cond);
+
+  gst_camera_settings_destroy (src->settings);
+  src->settings = NULL;
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -665,8 +668,6 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
 
   switch (transition) {
     case GST_STATE_CHANGE_NULL_TO_READY:
-      src->settings = gst_camera_settings_new ();
-
       if (!gst_droid_cam_src_probe_camera (src)) {
         ret = GST_STATE_CHANGE_FAILURE;
       }
@@ -731,8 +732,6 @@ gst_droid_cam_src_change_state (GstElement * element, GstStateChange transition)
 
     case GST_STATE_CHANGE_READY_TO_NULL:
       gst_droid_cam_src_tear_down_pipeline (src);
-      gst_camera_settings_destroy (src->settings);
-      src->settings = NULL;
       break;
 
     default:
