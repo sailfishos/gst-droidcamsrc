@@ -92,6 +92,7 @@ AC_CHECK_LIB(hardware, hw_get_module, [], AC_MSG_ERROR([libhardware not found]))
 AC_CONFIG_FILES([Makefile
 		gst/Makefile
 		gst/droidcamsrc/Makefile
+		data/Makefile
 		test/Makefile
 		])
 AC_OUTPUT
