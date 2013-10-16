@@ -1157,6 +1157,9 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
     goto out;
   }
 
+  /* We need to reset focus mode because default for video recording is continuous-video */
+  gst_photo_iface_update_focus_mode (src);
+
   GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
   src->pool->flushing = FALSE;
   GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
