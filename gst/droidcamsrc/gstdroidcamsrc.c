@@ -1852,10 +1852,16 @@ gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src)
     free (params);
   }
 
-  max_zoom = camera_params_get_int (camera_params, "max-zoom") + 1;
-  if (max_zoom + 1 != src->max_zoom * 10) {
+  /* 0  -> 1.0
+   * 1  -> 1.1
+   * 2  -> 1.2
+   * 10 -> 2.0
+   * 60 -> 7.0
+   */
+  max_zoom = camera_params_get_int (camera_params, "max-zoom");
+  if (max_zoom + 10 != (int) (src->max_zoom * 10)) {
     GST_DEBUG_OBJECT (src, "setting max_zoom to %f", src->max_zoom);
-    src->max_zoom = (max_zoom + 1) / 10.0;
+    src->max_zoom = (max_zoom + 10) / 10.0;
 
     g_object_notify (G_OBJECT (src), "max-zoom");
 
