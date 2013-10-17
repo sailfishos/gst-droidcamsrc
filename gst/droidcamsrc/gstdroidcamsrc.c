@@ -1749,6 +1749,9 @@ gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src)
   gchar *params;
   struct camera_params *camera_params;
   int max_zoom;
+  GParamSpec *pspec;
+  GParamSpecFloat *pspec_f;
+  gboolean zoom_changed = FALSE;
 
   /* It's really bad how we get the value of max-zoom but at least it works. */
   GST_DEBUG_OBJECT (src, "update max zoom");
@@ -1769,12 +1772,30 @@ gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src)
 
   max_zoom = camera_params_get_int (camera_params, "max-zoom") + 1;
   if (max_zoom + 1 != src->max_zoom * 10) {
+    GST_DEBUG_OBJECT (src, "setting max_zoom to %f", src->max_zoom);
     src->max_zoom = (max_zoom + 1) / 10.0;
 
-    GST_DEBUG_OBJECT (src, "setting max_zoom to %f", src->max_zoom);
-
     g_object_notify (G_OBJECT (src), "max-zoom");
+
+    zoom_changed = TRUE;
   }
 
   camera_params_free (camera_params);
+
+  if (!zoom_changed) {
+    return;
+  }
+
+  /* update gobject param spec */
+  pspec =
+      g_object_class_find_property (G_OBJECT_CLASS (GST_DROID_CAM_SRC_GET_CLASS
+          (src)), "zoom");
+  if (pspec && (G_PARAM_SPEC_VALUE_TYPE (pspec) == G_TYPE_FLOAT)) {
+    pspec_f = G_PARAM_SPEC_FLOAT (pspec);
+    pspec_f->maximum = src->max_zoom;
+
+    /* TODO: Check that the current zoom value is less than the maximum zoom value. */
+  } else {
+    GST_WARNING_OBJECT (src, "failed to update maximum zoom value");
+  }
 }
