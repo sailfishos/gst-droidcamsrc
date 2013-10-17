@@ -138,6 +138,7 @@ struct _GstDroidCamSrc {
 
   /* photography interface bits */
   GstPhotoSettings photo_settings;
+  gfloat max_zoom;
 
   GstCameraSettings *settings;
 };
