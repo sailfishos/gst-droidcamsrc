@@ -65,6 +65,16 @@ camera_params_get_fps_list (struct camera_params *params, GValue& output)
 struct camera_params *
 camera_params_from_string (const char *str)
 {
+  struct camera_params *params = new struct camera_params;
+
+  camera_params_update (params, str);
+
+  return params;
+}
+
+void
+camera_params_update (struct camera_params *params, const char *str)
+{
   std::string s (str);
 
   std::stringstream stream;
@@ -93,10 +103,7 @@ camera_params_from_string (const char *str)
             values));
   }
 
-  struct camera_params *params = new struct camera_params;
   params->items = items;
-
-  return params;
 }
 
 void

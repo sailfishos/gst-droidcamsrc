@@ -28,6 +28,7 @@ G_BEGIN_DECLS
 struct camera_params;
 
 struct camera_params *camera_params_from_string(const char *str);
+void camera_params_update (struct camera_params *params, const char *str);
 void camera_params_free(struct camera_params *params);
 char *camera_params_to_string(struct camera_params *params);
 void camera_params_dump(struct camera_params *params);
