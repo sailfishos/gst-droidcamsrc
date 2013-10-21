@@ -68,6 +68,7 @@ gst_droid_cam_src_get_exif_tags (GstBuffer * input)
     gst_tag_list_remove_tag (tags, GST_TAG_DEVICE_MANUFACTURER);
     gst_tag_list_remove_tag (tags, GST_TAG_DEVICE_MODEL);
     gst_tag_list_remove_tag (tags, GST_TAG_APPLICATION_NAME);
+    gst_tag_list_remove_tag (tags, GST_TAG_DATE_TIME);
     /*
      * ISO seems to be dropped by gst_tag_list_from_exif_buffer_with_tiff_header ()
      * since EEIF 2.3 makes a new mess out of exif tags.
