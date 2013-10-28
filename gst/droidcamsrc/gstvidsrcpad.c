@@ -337,7 +337,7 @@ stop_recording:
 
   g_mutex_unlock (&src->video_lock);
 
-  GST_LOG_OBJECT (src, "pushed %d video frames", src->num_video_frames - 1);
+  GST_LOG_OBJECT (src, "pushed %d video frames", src->num_video_frames);
 }
 
 static gboolean
