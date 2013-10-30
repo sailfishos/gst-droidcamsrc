@@ -295,7 +295,7 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
 
     while (src->video_queue->length > 0) {
       buffer = g_queue_pop_head (src->video_queue);
-      GST_LOG_OBJECT (src, "dropping buffer %p", buffer);
+      GST_DEBUG_OBJECT (src, "dropping buffer %p", buffer);
       gst_buffer_unref (buffer);
     }
 
@@ -331,13 +331,13 @@ stop_recording:
 
   while (src->video_queue->length > 0) {
     buffer = g_queue_pop_head (src->video_queue);
-    GST_LOG_OBJECT (src, "dropping buffer %p", buffer);
+    GST_DEBUG_OBJECT (src, "dropping buffer %p", buffer);
     gst_buffer_unref (buffer);
   }
 
   g_mutex_unlock (&src->video_lock);
 
-  GST_LOG_OBJECT (src, "pushed %d video frames", src->num_video_frames);
+  GST_DEBUG_OBJECT (src, "pushed %d video frames", src->num_video_frames);
 }
 
 static gboolean

@@ -1233,7 +1233,9 @@ gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
   /* Make sure the video queue is empty */
   g_mutex_lock (&src->video_lock);
   while (src->video_queue->length > 0) {
-    gst_buffer_unref (g_queue_pop_head (src->video_queue));
+    GstBuffer *buffer = g_queue_pop_head (src->video_queue);
+    GST_DEBUG_OBJECT (src, "dropping buffer %p", buffer);
+    gst_buffer_unref (buffer);
   }
 
   g_mutex_unlock (&src->video_lock);
@@ -1252,8 +1254,7 @@ gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
 
   /* Now we really stop. */
   src->dev->ops->stop_recording (src->dev);
-
-  GST_LOG_OBJECT (src, "HAL stopped recording");
+  GST_DEBUG_OBJECT (src, "HAL stopped recording");
 
   /* And finally: */
   g_mutex_lock (&src->capturing_mutex);
