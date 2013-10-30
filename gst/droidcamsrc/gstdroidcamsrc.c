@@ -302,6 +302,10 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   g_mutex_init (&src->video_capture_status_lock);
   g_cond_init (&src->video_capture_status_cond);
 
+  src->num_video_frames = 0;
+  g_mutex_init (&src->num_video_frames_lock);
+  g_cond_init (&src->num_video_frames_cond);
+
   src->camera_sensor_orientation[0] =
       GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN;
   src->camera_sensor_orientation[1] =
@@ -349,6 +353,9 @@ gst_droid_cam_src_finalize (GObject * object)
 
   g_mutex_clear (&src->video_capture_status_lock);
   g_cond_clear (&src->video_capture_status_cond);
+
+  g_cond_clear (&src->num_video_frames_cond);
+  g_mutex_clear (&src->num_video_frames_lock);
 
   gst_camera_settings_destroy (src->settings);
   src->settings = NULL;
@@ -1143,7 +1150,10 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
   g_mutex_lock (&src->pushed_video_frames_lock);
   src->pushed_video_frames = 0;
   g_mutex_unlock (&src->pushed_video_frames_lock);
+
+  g_mutex_lock (&src->num_video_frames_lock);
   src->num_video_frames = 0;
+  g_mutex_unlock (&src->num_video_frames_lock);
 
   g_mutex_lock (&src->video_capture_status_lock);
   src->video_capture_status = VIDEO_CAPTURE_STARTING;
@@ -1203,24 +1213,35 @@ gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src)
   GST_DEBUG_OBJECT (src, "stop video capture");
 
   /*
-   * First we tell gst_droid_cam_src_data_timestamp_callback() and
-   * our vidsrc pad loop function that we are stopping video recording.
+   * We cannot stop if we have not received at least 1-3 frames
+   * There is a race condition somewhere which will cause invalid pointer
+   * to be passed to the kernel which will cause a panic and reboot:
    */
+  g_mutex_lock (&src->num_video_frames_lock);
 
-  g_mutex_lock (&src->video_capture_status_lock);
-  src->video_capture_status = VIDEO_CAPTURE_STOPPING;
+  while (src->num_video_frames < 4) {
+    GST_DEBUG_OBJECT (src, "waiting for more buffers to be pushed. Now: %d",
+        src->num_video_frames);
+    g_cond_wait (&src->num_video_frames_cond, &src->num_video_frames_lock);
+  }
+
+  GST_DEBUG_OBJECT (src, "done waiting");
+  g_mutex_unlock (&src->num_video_frames_lock);
 
   /*
-   * We are discarding all new buffers and the queue might be empty.
-   * We will signal our vidsrc loop thread.
+   * First we tell vidsrc pad loop function that we are stopping video recording.
    */
+  g_mutex_lock (&src->video_capture_status_lock);
+  src->video_capture_status = VIDEO_CAPTURE_STOPPING;
+  g_mutex_unlock (&src->video_capture_status_lock);
 
-  g_mutex_lock (&src->video_lock);
-  g_cond_signal (&src->video_cond);
-  g_mutex_unlock (&src->video_lock);
-
-  g_cond_wait (&src->video_capture_status_cond,
-      &src->video_capture_status_lock);
+  /* Now check the status again */
+  g_mutex_lock (&src->video_capture_status_lock);
+  if (!(src->video_capture_status == VIDEO_CAPTURE_STOPPED)
+      || (src->video_capture_status == VIDEO_CAPTURE_ERROR)) {
+    g_cond_wait (&src->video_capture_status_cond,
+        &src->video_capture_status_lock);
+  }
 
   GST_LOG_OBJECT (src, "video_capture_status is now %i",
       src->video_capture_status);
@@ -1440,7 +1461,7 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
   GST_LOG_OBJECT (src, "received video data %p of size %i", video_data, size);
 
   g_mutex_lock (&src->video_capture_status_lock);
-  if (src->video_capture_status > VIDEO_CAPTURE_RUNNING
+  if (src->video_capture_status == VIDEO_CAPTURE_STOPPED
       || src->video_capture_status == VIDEO_CAPTURE_ERROR) {
     drop_buffer = TRUE;
   }
@@ -1464,8 +1485,11 @@ gst_droid_cam_src_data_timestamp_callback (int64_t timestamp,
 
   buff = gst_buffer_new ();
 
+  g_mutex_lock (&src->num_video_frames_lock);
   GST_BUFFER_OFFSET (buff) = src->num_video_frames++;
   GST_BUFFER_OFFSET_END (buff) = src->num_video_frames;
+  g_cond_signal (&src->num_video_frames_cond);
+  g_mutex_unlock (&src->num_video_frames_lock);
 
   GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
   duration = src->pool->buffer_duration;

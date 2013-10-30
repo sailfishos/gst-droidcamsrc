@@ -243,9 +243,20 @@ gst_droid_cam_src_vidsrc_loop (gpointer data)
 
   switch (src->video_capture_status) {
     case VIDEO_CAPTURE_ERROR:
-    case VIDEO_CAPTURE_STOPPED:
       g_assert_not_reached ();
       break;
+    case VIDEO_CAPTURE_STOPPED:
+      /* This could still happen since main thread will signal us
+       * while stopping videos:
+       * 1) we saw the status change, performed EOS and stopped recording.
+       * 2) we stopped the recording
+       * 3) we got the signaled
+       */
+
+      GST_DEBUG_OBJECT (src, "video recording has been stopped already");
+      g_mutex_unlock (&src->video_capture_status_lock);
+      g_mutex_unlock (&src->video_lock);
+      return;
 
     case VIDEO_CAPTURE_STARTING:
       send_new_segment = TRUE;

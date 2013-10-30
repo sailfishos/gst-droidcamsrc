@@ -130,6 +130,8 @@ struct _GstDroidCamSrc {
   VideoCaptureStatus video_capture_status;
 
   int num_video_frames;
+  GMutex num_video_frames_lock;
+  GCond num_video_frames_cond;
 
   gboolean capture_start_sent;
   gboolean capture_end_sent;
