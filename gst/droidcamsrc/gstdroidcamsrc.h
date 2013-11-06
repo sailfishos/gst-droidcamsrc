@@ -142,6 +142,8 @@ struct _GstDroidCamSrc {
   GstPhotoSettings photo_settings;
 
   GstCameraSettings *settings;
+
+  gboolean image_noise_reduction;
 };
 
 struct _GstDroidCamSrcClass {

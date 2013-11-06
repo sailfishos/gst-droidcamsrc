@@ -40,9 +40,10 @@
 #include "gstvidsrcpad.h"
 #include "gstphotoiface.h"
 
-#define DEFAULT_CAMERA_DEVICE      0
-#define DEFAULT_MODE               MODE_IMAGE
-#define DEFAULT_VIDEO_METADATA     TRUE
+#define DEFAULT_CAMERA_DEVICE         0
+#define DEFAULT_MODE                  MODE_IMAGE
+#define DEFAULT_VIDEO_METADATA        TRUE
+#define DEFAULT_IMAGE_NOISE_REDUCTION TRUE
 
 GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
@@ -109,6 +110,8 @@ static gboolean gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc *
 static gboolean gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc *
     src);
 static void gst_droid_cam_src_stop_video_capture (GstDroidCamSrc * src);
+static void gst_droid_cam_src_apply_image_noise_reduction (GstDroidCamSrc *
+    src);
 
 static void gst_droid_cam_src_data_callback (int32_t msg_type,
     const camera_memory_t * mem, unsigned int index,
@@ -240,6 +243,12 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
           GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN,
           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_IMAGE_NOISE_REDUCTION,
+      g_param_spec_boolean ("image-noise-reduction", "Image noise reduction",
+          "HAL specific noise reduction for captured images",
+          DEFAULT_IMAGE_NOISE_REDUCTION,
+          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
   gst_photo_iface_add_properties (gobject_class);
 
   droidcamsrc_signals[START_CAPTURE_SIGNAL] =
@@ -275,6 +284,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->camera_params = NULL;
   src->events = NULL;
   src->settings = gst_camera_settings_new ();
+  src->image_noise_reduction = DEFAULT_IMAGE_NOISE_REDUCTION;
 
   gst_segment_init (&src->segment, GST_FORMAT_TIME);
 
@@ -395,6 +405,10 @@ gst_droid_cam_src_get_property (GObject * object, guint prop_id,
           src->camera_sensor_orientation[src->camera_device]);
       break;
 
+    case PROP_IMAGE_NOISE_REDUCTION:
+      g_value_set_boolean (value, src->image_noise_reduction);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -423,6 +437,7 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
     case PROP_MODE:
       src->mode = g_value_get_enum (value);
       gst_photo_iface_update_focus_mode (src);
+      gst_droid_cam_src_apply_image_noise_reduction (src);
 
 #if 0
       gst_droid_cam_src_set_recording_hint (src, TRUE);
@@ -431,6 +446,11 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
 
     case PROP_VIDEO_METADATA:
       src->video_metadata = g_value_get_boolean (value);
+      break;
+
+    case PROP_IMAGE_NOISE_REDUCTION:
+      src->image_noise_reduction = g_value_get_boolean (value);
+      gst_droid_cam_src_apply_image_noise_reduction (src);
       break;
 
     default:
@@ -474,6 +494,8 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   }
 
   gst_photo_iface_settings_to_params (src);
+
+  gst_droid_cam_src_apply_image_noise_reduction (src);
 
   if (!gst_droid_cam_src_set_callbacks (src)) {
     goto cleanup;
@@ -1751,4 +1773,29 @@ gst_droid_cam_src_send_message (GstDroidCamSrc * src,
   }
 
   GST_LOG_OBJECT (src, "%s message sent", msg_name);
+}
+
+static void
+gst_droid_cam_src_apply_image_noise_reduction (GstDroidCamSrc * src)
+{
+  GST_DEBUG_OBJECT (src, "apply image noise reduction %d in camera mode %d",
+      src->image_noise_reduction, src->mode);
+
+  if (!src->camera_params) {
+    GST_WARNING_OBJECT (src, "Deferring image noise reduction setting");
+    return;
+  }
+
+  if (src->mode != MODE_IMAGE) {
+    GST_LOG_OBJECT (src, "Disabling image noise reduction in video mode");
+    camera_params_set (src->camera_params, "denoise", "denoise-off");
+  } else if (src->image_noise_reduction) {
+    GST_LOG_OBJECT (src, "Enabling image noise reduction");
+    camera_params_set (src->camera_params, "denoise", "denoise-on");
+  } else {
+    GST_LOG_OBJECT (src, "Disabling image noise reduction");
+    camera_params_set (src->camera_params, "denoise", "denoise-off");
+  }
+
+  gst_droid_cam_src_set_camera_params (src);
 }
