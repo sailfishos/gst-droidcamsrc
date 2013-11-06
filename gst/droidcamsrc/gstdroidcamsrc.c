@@ -495,7 +495,10 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
 
   gst_photo_iface_settings_to_params (src);
 
-  gst_droid_cam_src_apply_image_noise_reduction (src);
+  /* TODO: If we end up with a device with 1 camera then this will break. */
+  if (src->camera_device == 0) {
+    gst_droid_cam_src_apply_image_noise_reduction (src);
+  }
 
   if (!gst_droid_cam_src_set_callbacks (src)) {
     goto cleanup;
@@ -1783,6 +1786,12 @@ gst_droid_cam_src_apply_image_noise_reduction (GstDroidCamSrc * src)
 
   if (!src->camera_params) {
     GST_WARNING_OBJECT (src, "Deferring image noise reduction setting");
+    return;
+  }
+
+  if (src->camera_device != 0) {
+    GST_WARNING_OBJECT (src,
+        "Image noise reduction is only supported by primary camera");
     return;
   }
 
