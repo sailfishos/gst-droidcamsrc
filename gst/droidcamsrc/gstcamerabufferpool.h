@@ -41,6 +41,8 @@ typedef struct _GstCameraBufferPoolClass GstCameraBufferPoolClass;
 #define GST_CAMERA_BUFFER_POOL_LOCK(p) g_mutex_lock (&p->lock)
 #define GST_CAMERA_BUFFER_POOL_UNLOCK(p) g_mutex_unlock (&p->lock)
 
+#define GST_DROID_CAM_SRC_CROP_QDATA "GstDroidCamSrcCropData"
+
 struct _GstCameraBufferPool {
   GstMiniObject parent;
 
