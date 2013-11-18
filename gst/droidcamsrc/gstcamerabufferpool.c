@@ -405,7 +405,7 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
 
   GstCameraBufferPool *pool = gst_camera_buffer_pool_get (w);
 
-  GST_DEBUG_OBJECT (pool, "dequeue buffer");
+  GST_LOG_OBJECT (pool, "dequeue buffer");
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
@@ -534,7 +534,7 @@ gst_camera_buffer_pool_enqueue_buffer (struct preview_stream_ops *w,
   GstCameraBufferPool *pool = gst_camera_buffer_pool_get (w);
   GstNativeBuffer *buff = gst_camera_buffer_pool_get_buffer (buffer);
 
-  GST_DEBUG_OBJECT (pool, "enqueue buffer %p", buff);
+  GST_LOG_OBJECT (pool, "enqueue buffer %p", buff);
 
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
