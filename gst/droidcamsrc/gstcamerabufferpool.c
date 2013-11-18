@@ -308,16 +308,9 @@ gst_camera_buffer_pool_set_crop (struct preview_stream_ops *w, int left,
     GST_DEBUG_OBJECT (pool, "same crop. Nothing to do");
     GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
     return 0;
-  } else if (pool->left != 0 || pool->top != 0 || pool->right != 0
-      || pool->bottom != 0) {
-    GST_WARNING_OBJECT (pool, "crop previously set");
-
-    GST_CAMERA_BUFFER_POOL_UNLOCK (pool);
-
-    return -EINVAL;
   }
 
-  GST_LOG_OBJECT (pool,
+  GST_DEBUG_OBJECT (pool,
       "Setting crop to left: %d, top: %d, right: %d, bottom: %d", left, top,
       right, bottom);
 
@@ -479,6 +472,7 @@ gst_camera_buffer_pool_set_buffer_metadata (GstCameraBufferPool * pool,
     GstNativeBuffer * buffer)
 {
   GstBuffer *buff = GST_BUFFER (buffer);
+  GstStructure *crop = NULL;
 
   GST_DEBUG_OBJECT (pool, "set buffer metadata");
 
@@ -522,6 +516,15 @@ gst_camera_buffer_pool_set_buffer_metadata (GstCameraBufferPool * pool,
   }
 
   GST_BUFFER_DURATION (buff) = pool->buffer_duration;
+
+  crop = gst_structure_new (GST_DROID_CAM_SRC_CROP_QDATA,
+      "left", G_TYPE_INT, pool->left,
+      "top", G_TYPE_INT, pool->top,
+      "right", G_TYPE_INT, pool->right,
+      "bottom", G_TYPE_INT, pool->bottom, NULL);
+
+  gst_buffer_set_qdata (buff,
+      g_quark_from_string (GST_DROID_CAM_SRC_CROP_QDATA), crop);
 }
 
 static int
