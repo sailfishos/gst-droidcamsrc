@@ -554,8 +554,10 @@ gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on)
   }
 
   if (on) {
+    GST_DEBUG_OBJECT (src, "starting autofocus");
     gst_droid_cam_src_start_autofocus (src);
   } else {
+    GST_DEBUG_OBJECT (src, "stopping autofocus");
     gst_droid_cam_src_stop_autofocus (src);
   }
 }
