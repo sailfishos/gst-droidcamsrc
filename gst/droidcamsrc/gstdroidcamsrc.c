@@ -44,6 +44,7 @@
 #define DEFAULT_MODE                  MODE_IMAGE
 #define DEFAULT_VIDEO_METADATA        TRUE
 #define DEFAULT_IMAGE_NOISE_REDUCTION TRUE
+#define DEFAULT_MAX_ZOOM              10.0
 
 GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
@@ -129,6 +130,7 @@ static void gst_droid_cam_src_handle_compressed_image (GstDroidCamSrc * src,
     camera_frame_metadata_t * metadata);
 
 static gboolean gst_droid_cam_src_finish_capture (GstDroidCamSrc * src);
+static void gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src);
 
 #if 0
 static void gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src,
@@ -249,6 +251,12 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
           DEFAULT_IMAGE_NOISE_REDUCTION,
           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_MAX_ZOOM,
+      g_param_spec_float ("max-zoom", "Maximum zoom level (note: may change "
+          "depending on resolution/implementation)",
+          "Digital zoom factor", 1.0f, G_MAXFLOAT,
+          DEFAULT_MAX_ZOOM, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
   gst_photo_iface_add_properties (gobject_class);
 
   droidcamsrc_signals[START_CAPTURE_SIGNAL] =
@@ -285,6 +293,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->events = NULL;
   src->settings = gst_camera_settings_new ();
   src->image_noise_reduction = DEFAULT_IMAGE_NOISE_REDUCTION;
+  src->max_zoom = DEFAULT_MAX_ZOOM;
 
   gst_segment_init (&src->segment, GST_FORMAT_TIME);
 
@@ -407,6 +416,10 @@ gst_droid_cam_src_get_property (GObject * object, guint prop_id,
 
     case PROP_IMAGE_NOISE_REDUCTION:
       g_value_set_boolean (value, src->image_noise_reduction);
+      break;
+
+    case PROP_MAX_ZOOM:
+      g_value_set_float (value, src->max_zoom);
       break;
 
     default:
@@ -962,6 +975,8 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
   }
 #endif
 
+  gst_droid_cam_src_update_max_zoom (src);
+
   return TRUE;
 }
 
@@ -1094,6 +1109,7 @@ gst_droid_cam_src_start_image_capture_unlocked (GstDroidCamSrc * src)
     if (!gst_img_src_pad_renegotiate (src->imgsrc)) {
       GST_WARNING_OBJECT (src, "Failed to negotiate image capture caps");
 
+      /* TODO: update max_zoom when we renegotiate */
       return FALSE;
     }
 
@@ -1807,4 +1823,40 @@ gst_droid_cam_src_apply_image_noise_reduction (GstDroidCamSrc * src)
   }
 
   gst_droid_cam_src_set_camera_params (src);
+}
+
+static void
+gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src)
+{
+  gchar *params;
+  struct camera_params *camera_params;
+  int max_zoom;
+
+  /* It's really bad how we get the value of max-zoom but at least it works. */
+  GST_DEBUG_OBJECT (src, "update max zoom");
+
+  if (!src->dev) {
+    GST_DEBUG_OBJECT (src, "camera not open");
+    return;
+  }
+
+  params = src->dev->ops->get_parameters (src->dev);
+  camera_params = camera_params_from_string (params);
+
+  if (src->dev->ops->put_parameters) {
+    src->dev->ops->put_parameters (src->dev, params);
+  } else {
+    free (params);
+  }
+
+  max_zoom = camera_params_get_int (camera_params, "max-zoom") + 1;
+  if (max_zoom + 1 != src->max_zoom * 10) {
+    src->max_zoom = (max_zoom + 1) / 10.0;
+
+    GST_DEBUG_OBJECT (src, "setting max_zoom to %f", src->max_zoom);
+
+    g_object_notify (G_OBJECT (src), "max-zoom");
+  }
+
+  camera_params_free (camera_params);
 }
