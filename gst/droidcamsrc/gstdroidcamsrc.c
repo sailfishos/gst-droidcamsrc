@@ -233,6 +233,7 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
           "Element is ready for starting another capture",
           TRUE, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
+  /* TODO: We should negotiate that via caps negotiation */
   g_object_class_install_property (gobject_class, PROP_VIDEO_METADATA,
       g_param_spec_boolean ("video-metadata", "Video metadata",
           "Set output mode for video data",
