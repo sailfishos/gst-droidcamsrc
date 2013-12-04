@@ -45,6 +45,7 @@
 #define DEFAULT_VIDEO_METADATA        TRUE
 #define DEFAULT_IMAGE_NOISE_REDUCTION TRUE
 #define DEFAULT_MAX_ZOOM              10.0
+#define DEFAULT_VIDEO_TORCH           FALSE
 
 GST_DEBUG_CATEGORY_STATIC (droidcam_debug);
 #define GST_CAT_DEFAULT droidcam_debug
@@ -143,6 +144,7 @@ static void gst_droid_cam_src_send_capture_end (GstDroidCamSrc * src);
 static void gst_droid_cam_src_boilerplate_init (GType type);
 static void gst_droid_cam_src_send_message (GstDroidCamSrc * src,
     const gchar * msg_name, int status);
+static void gst_droid_cam_src_adjust_video_torch (GstDroidCamSrc * src);
 
 GST_BOILERPLATE_FULL (GstDroidCamSrc, gst_droid_cam_src, GstBin,
     GST_TYPE_BIN, gst_droid_cam_src_boilerplate_init);
@@ -258,6 +260,11 @@ gst_droid_cam_src_class_init (GstDroidCamSrcClass * klass)
           "Digital zoom factor", 1.0f, G_MAXFLOAT,
           DEFAULT_MAX_ZOOM, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_VIDEO_TORCH,
+      g_param_spec_boolean ("video-torch", "Video torch",
+          "Sets torch light on or off for video recording",
+          DEFAULT_VIDEO_TORCH, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gst_photo_iface_add_properties (gobject_class);
 
   droidcamsrc_signals[START_CAPTURE_SIGNAL] =
@@ -295,6 +302,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->settings = gst_camera_settings_new ();
   src->image_noise_reduction = DEFAULT_IMAGE_NOISE_REDUCTION;
   src->max_zoom = DEFAULT_MAX_ZOOM;
+  src->video_torch = DEFAULT_VIDEO_TORCH;
 
   gst_segment_init (&src->segment, GST_FORMAT_TIME);
 
@@ -423,6 +431,10 @@ gst_droid_cam_src_get_property (GObject * object, guint prop_id,
       g_value_set_float (value, src->max_zoom);
       break;
 
+    case PROP_VIDEO_TORCH:
+      g_value_set_boolean (value, src->video_torch);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -452,7 +464,7 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
       src->mode = g_value_get_enum (value);
       gst_photo_iface_update_focus_mode (src);
       gst_droid_cam_src_apply_image_noise_reduction (src);
-
+      gst_droid_cam_src_adjust_video_torch (src);
 #if 0
       gst_droid_cam_src_set_recording_hint (src, TRUE);
 #endif
@@ -465,6 +477,11 @@ gst_droid_cam_src_set_property (GObject * object, guint prop_id,
     case PROP_IMAGE_NOISE_REDUCTION:
       src->image_noise_reduction = g_value_get_boolean (value);
       gst_droid_cam_src_apply_image_noise_reduction (src);
+      break;
+
+    case PROP_VIDEO_TORCH:
+      src->video_torch = g_value_get_boolean (value);
+      gst_droid_cam_src_adjust_video_torch (src);
       break;
 
     default:
@@ -512,6 +529,7 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   /* TODO: If we end up with a device with 1 camera then this will break. */
   if (src->camera_device == 0) {
     gst_droid_cam_src_apply_image_noise_reduction (src);
+    gst_droid_cam_src_adjust_video_torch (src);
   }
 
   if (!gst_droid_cam_src_set_callbacks (src)) {
@@ -1886,5 +1904,36 @@ gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src)
     /* TODO: Check that the current zoom value is less than the maximum zoom value. */
   } else {
     GST_WARNING_OBJECT (src, "failed to update maximum zoom value");
+  }
+}
+
+static void
+gst_droid_cam_src_adjust_video_torch (GstDroidCamSrc * src)
+{
+  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+
+  GST_DEBUG_OBJECT (src, "adjust video torch");
+
+  if (!src->camera_params) {
+    GST_DEBUG_OBJECT (src,
+        "Not fully initialized. Deferring video torch setting");
+    return;
+  }
+
+  if (src->mode != MODE_VIDEO) {
+    GST_DEBUG_OBJECT (src, "No video torch if not in video mode");
+    return;
+  }
+
+  if (src->video_torch) {
+    camera_params_set (src->camera_params, "flash-mode", "torch");
+    if (!klass->set_camera_params (src)) {
+      GST_WARNING_OBJECT (src, "Failed to set video torch");
+      gst_photo_iface_update_flash_mode (src);
+      src->video_torch = FALSE;
+      g_object_notify (G_OBJECT (src), "video-torch");
+    }
+  } else {
+    gst_photo_iface_update_flash_mode (src);
   }
 }

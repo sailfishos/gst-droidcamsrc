@@ -255,6 +255,12 @@ gst_photo_iface_set_flash_mode (GstPhotography * photo, GstFlashMode flash)
       TRUE);
 }
 
+void
+gst_photo_iface_update_flash_mode (GstDroidCamSrc * src)
+{
+  _gst_photo_iface_set_flash_mode (src, src->photo_settings.flash_mode, TRUE);
+}
+
 static GstFlashMode
 _gst_photo_iface_get_flash_mode (GstDroidCamSrc * src)
 {

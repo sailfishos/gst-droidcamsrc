@@ -35,6 +35,7 @@ enum
   PROP_SENSOR_MOUNT_ANGLE,
   PROP_IMAGE_NOISE_REDUCTION,
   PROP_MAX_ZOOM,
+  PROP_VIDEO_TORCH,
 
   /* photography */
   PROP_FLASH_MODE,
@@ -57,6 +58,7 @@ gboolean gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
 				       const GValue * value, GParamSpec * pspec);
 
 void gst_photo_iface_update_focus_mode (GstDroidCamSrc * src);
+void gst_photo_iface_update_flash_mode (GstDroidCamSrc * src);
 
 G_END_DECLS
 
