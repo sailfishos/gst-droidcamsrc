@@ -75,6 +75,16 @@ typedef enum {
 typedef struct _GstDroidCamSrc GstDroidCamSrc;
 typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;
 
+typedef struct _GstDroidCamSrcCameraInfo GstDroidCamSrcCameraInfo;
+
+struct _GstDroidCamSrcCameraInfo {
+  /* Sensor mount angle */
+  int orientation;
+
+  /* id used for open() call */
+  int id;
+};
+
 struct _GstDroidCamSrc {
   GstBin parent;
 
@@ -136,7 +146,7 @@ struct _GstDroidCamSrc {
   gboolean capture_start_sent;
   gboolean capture_end_sent;
 
-  int camera_sensor_orientation[2];
+  GstDroidCamSrcCameraInfo device_info[2];
 
   /* photography interface bits */
   GstPhotoSettings photo_settings;

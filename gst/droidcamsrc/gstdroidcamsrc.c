@@ -334,10 +334,12 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   g_mutex_init (&src->num_video_frames_lock);
   g_cond_init (&src->num_video_frames_cond);
 
-  src->camera_sensor_orientation[0] =
+  src->device_info[0].orientation =
       GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN;
-  src->camera_sensor_orientation[1] =
+  src->device_info[0].id = -1;
+  src->device_info[1].orientation =
       GST_DROID_CAM_SRC_SENSOR_MOUNT_ANGLE_UNKNOWN;
+  src->device_info[1].id = -1;
 
   gst_photo_iface_init_settings (src);
 
@@ -420,7 +422,7 @@ gst_droid_cam_src_get_property (GObject * object, guint prop_id,
 
     case PROP_SENSOR_MOUNT_ANGLE:
       g_value_set_enum (value,
-          src->camera_sensor_orientation[src->camera_device]);
+          src->device_info[src->camera_device].orientation);
       break;
 
     case PROP_IMAGE_NOISE_REDUCTION:
@@ -494,16 +496,24 @@ static gboolean
 gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
 {
   int err = 0;
+  int id;
   gchar *cam_id = NULL;
   gchar *params = NULL;
 
-  GST_DEBUG_OBJECT (src, "setup pipeline");
-
-  GST_DEBUG_OBJECT (src, "Attempting to open camera %d", src->camera_device);
+  GST_DEBUG_OBJECT (src, "setup pipeline for camera %d", src->camera_device);
 
   src->camera_device = src->user_camera_device;
+
+  id = src->device_info[src->camera_device].id;
+  if (id == -1) {
+    GST_ELEMENT_ERROR (src, LIBRARY, INIT,
+        ("failed to open camera device %d because it's not been detected",
+            src->camera_device), (NULL));
+    goto cleanup;
+  }
+
   /* We assume camera id 0 is back and 1 is front */
-  cam_id = g_strdup_printf ("%i", src->camera_device);
+  cam_id = g_strdup_printf ("%i", id);
   err = src->cam->common.methods->open (src->hwmod, cam_id, &src->cam_dev);
   g_free (cam_id);
 
@@ -537,7 +547,7 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   }
 
   GST_CAMERA_BUFFER_POOL_LOCK (src->pool);
-  src->pool->orientation = src->camera_sensor_orientation[src->camera_device];
+  src->pool->orientation = src->device_info[src->camera_device].orientation;
   GST_CAMERA_BUFFER_POOL_UNLOCK (src->pool);
 
   return TRUE;
@@ -551,7 +561,9 @@ static gboolean
 gst_droid_cam_src_probe_camera (GstDroidCamSrc * src)
 {
   int err;
+  int num_of_cameras;
   struct camera_info info;
+  int x;
 
   GST_DEBUG_OBJECT (src, "probe camera");
 
@@ -582,30 +594,38 @@ gst_droid_cam_src_probe_camera (GstDroidCamSrc * src)
 
   src->cam = (camera_module_t *) src->hwmod;
 
-  if (src->cam->get_number_of_cameras () != 2) {
-    GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("number of cameras is not 2"),
+  num_of_cameras = src->cam->get_number_of_cameras ();
+  GST_INFO_OBJECT (src, "number of cameras: %d", num_of_cameras);
+
+  if (num_of_cameras > 2) {
+    GST_ELEMENT_ERROR (src, LIBRARY, INIT, ("number of cameras is more than 2"),
         (NULL));
     goto cleanup;
   }
 
-  /* We assume camera 0 is primary and camera 1 is secondary */
-  memset (src->camera_sensor_orientation, -1, 2);
-  err = src->cam->get_camera_info (0, &info);
-  if (err != 0) {
-    GST_WARNING_OBJECT (src, "Error %d getting camera 0 info", err);
-  } else {
-    src->camera_sensor_orientation[0] = info.orientation;
-  }
+  for (x = 0; x < num_of_cameras; x++) {
+    int dev;
+    err = src->cam->get_camera_info (x, &info);
+    if (err != 0) {
+      GST_WARNING_OBJECT (src, "Error %d getting camera %d info", err, x);
+      continue;
+    }
 
-  err = src->cam->get_camera_info (1, &info);
-  if (err != 0) {
-    GST_WARNING_OBJECT (src, "Error %d getting camera 1 info", err);
-  } else {
-    src->camera_sensor_orientation[1] = info.orientation;
-  }
+    /* Now we have info. Let's fill our structs */
+    if (info.facing == CAMERA_FACING_BACK) {
+      dev = 0;
+    } else if (info.facing == CAMERA_FACING_FRONT) {
+      dev = 1;
+    } else {
+      GST_WARNING_OBJECT (src, "Unknown camera %d", x);
+      continue;
+    }
 
-  GST_DEBUG_OBJECT (src, "Camera orientation: 0 = %d, 1 = %d",
-      src->camera_sensor_orientation[0], src->camera_sensor_orientation[1]);
+    src->device_info[dev].id = x;
+    src->device_info[dev].orientation = info.orientation;
+
+    GST_INFO_OBJECT (src, "camera %d with orientation %d", x, info.orientation);
+  }
 
   g_object_notify (G_OBJECT (src), "sensor-mount-angle");
 
