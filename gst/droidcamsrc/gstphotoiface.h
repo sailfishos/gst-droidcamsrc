@@ -42,6 +42,7 @@ enum
   PROP_FOCUS_MODE,
   PROP_WB_MODE,
   PROP_ZOOM,
+  PROP_ISO_SPEED,
 
   /* end */
   N_PROPS,

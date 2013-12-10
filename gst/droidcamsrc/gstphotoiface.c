@@ -78,6 +78,15 @@ static gfloat _gst_photo_iface_get_zoom (GstDroidCamSrc * src);
 static gboolean _gst_photo_iface_set_zoom (GstDroidCamSrc * src, gfloat zoom,
     gboolean commit);
 
+/* ISO */
+static gboolean gst_photo_iface_get_iso_speed (GstPhotography * photo,
+    guint * iso);
+static gboolean gst_photo_iface_set_iso_speed (GstPhotography * photo,
+    guint iso);
+static guint _gst_photo_iface_get_iso_speed (GstDroidCamSrc * src);
+static gboolean _gst_photo_iface_set_iso_speed (GstDroidCamSrc * src, guint iso,
+    gboolean commit);
+
 /* Auto focus */
 static void gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on);
 
@@ -129,6 +138,8 @@ gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
   iface->set_white_balance_mode = gst_photo_iface_set_white_balance_mode;
   iface->get_zoom = gst_photo_iface_get_zoom;
   iface->set_zoom = gst_photo_iface_set_zoom;
+  iface->get_iso_speed = gst_photo_iface_get_iso_speed;
+  iface->set_iso_speed = gst_photo_iface_set_iso_speed;
 
   iface->set_autofocus = gst_photo_iface_set_autofocus;
 
@@ -145,6 +156,7 @@ gst_photo_iface_init_settings (GstDroidCamSrc * src)
   src->photo_settings.focus_mode = GST_PHOTOGRAPHY_FOCUS_MODE_AUTO;
   src->photo_settings.wb_mode = GST_PHOTOGRAPHY_WB_MODE_AUTO;
   src->photo_settings.zoom = 1.0;
+  src->photo_settings.iso_speed = 0;
 
   // TODO: more
 }
@@ -164,6 +176,9 @@ gst_photo_iface_add_properties (GObjectClass * gobject_class)
   g_object_class_override_property (gobject_class, PROP_ZOOM,
       GST_PHOTOGRAPHY_PROP_ZOOM);
 
+  g_object_class_override_property (gobject_class, PROP_ISO_SPEED,
+      GST_PHOTOGRAPHY_PROP_ISO_SPEED);
+
   // TODO: more
 }
 
@@ -177,6 +192,7 @@ gst_photo_iface_settings_to_params (GstDroidCamSrc * src)
   _gst_photo_iface_set_white_balance_mode (src, src->photo_settings.wb_mode,
       FALSE);
   _gst_photo_iface_set_zoom (src, src->photo_settings.zoom, FALSE);
+  _gst_photo_iface_set_iso_speed (src, src->photo_settings.iso_speed, FALSE);
 
   // TODO: more
 }
@@ -200,6 +216,10 @@ gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,
 
     case PROP_ZOOM:
       g_value_set_float (value, _gst_photo_iface_get_zoom (src));
+      return TRUE;
+
+    case PROP_ISO_SPEED:
+      g_value_set_uint (value, _gst_photo_iface_get_iso_speed (src));
       return TRUE;
   }
 
@@ -228,6 +248,10 @@ gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
 
     case PROP_ZOOM:
       _gst_photo_iface_set_zoom (src, g_value_get_float (value), TRUE);
+      return TRUE;
+
+    case PROP_ISO_SPEED:
+      _gst_photo_iface_set_iso_speed (src, g_value_get_uint (value), TRUE);
       return TRUE;
   }
 
@@ -526,6 +550,75 @@ _gst_photo_iface_set_zoom (GstDroidCamSrc * src, gfloat zoom, gboolean commit)
   camera_params_set (src->camera_params, "zoom", val);
   g_free (val);
 
+  GST_OBJECT_UNLOCK (src);
+
+  if (!commit) {
+    return TRUE;
+  }
+
+  return klass->set_camera_params (src);
+}
+
+static gboolean
+gst_photo_iface_get_iso_speed (GstPhotography * photo, guint * iso)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_DEBUG_OBJECT (src, "get iso speed");
+
+  *iso = _gst_photo_iface_get_iso_speed (src);
+
+  return TRUE;
+}
+
+static gboolean
+gst_photo_iface_set_iso_speed (GstPhotography * photo, guint iso)
+{
+  return _gst_photo_iface_set_iso_speed (GST_DROID_CAM_SRC (photo), iso, TRUE);
+}
+
+static guint
+_gst_photo_iface_get_iso_speed (GstDroidCamSrc * src)
+{
+  guint iso;
+
+  GST_OBJECT_LOCK (src);
+
+  iso = src->photo_settings.iso_speed;
+
+  GST_DEBUG_OBJECT (src, "returning iso speed %i", iso);
+
+  GST_OBJECT_UNLOCK (src);
+
+  return iso;
+}
+
+static gboolean
+_gst_photo_iface_set_iso_speed (GstDroidCamSrc * src, guint iso,
+    gboolean commit)
+{
+  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+
+  const char *val =
+      gst_camera_settings_find_droid (src->settings->iso_speed, iso);
+
+  GST_DEBUG_OBJECT (src, "set iso speed to %i (%s)", iso, val);
+
+  if (!val) {
+    return FALSE;
+  }
+
+  GST_DEBUG_OBJECT (src, "storing iso speed %i", iso);
+
+  GST_OBJECT_LOCK (src);
+  src->photo_settings.iso_speed = iso;
+
+  if (!src->camera_params) {
+    GST_OBJECT_UNLOCK (src);
+    return TRUE;
+  }
+
+  camera_params_set (src->camera_params, "iso", val);
   GST_OBJECT_UNLOCK (src);
 
   if (!commit) {
