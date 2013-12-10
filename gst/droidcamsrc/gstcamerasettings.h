@@ -27,6 +27,7 @@ typedef struct {
   GHashTable *focus_mode;
   GHashTable *white_balance_mode;
   GHashTable *iso_speed;
+  GHashTable *colour_tone_mode;
 } GstCameraSettings;
 
 GstCameraSettings *gst_camera_settings_new ();

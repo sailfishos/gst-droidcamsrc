@@ -87,6 +87,16 @@ static guint _gst_photo_iface_get_iso_speed (GstDroidCamSrc * src);
 static gboolean _gst_photo_iface_set_iso_speed (GstDroidCamSrc * src, guint iso,
     gboolean commit);
 
+/* Colour tone */
+static gboolean gst_photo_iface_get_colour_tone (GstPhotography * photo,
+    GstColourToneMode * tone);
+static gboolean gst_photo_iface_set_colour_tone (GstPhotography * photo,
+    GstColourToneMode tone);
+static GstColourToneMode _gst_photo_iface_get_colour_tone
+    (GstDroidCamSrc * src);
+static gboolean _gst_photo_iface_set_colour_tone (GstDroidCamSrc * src,
+    GstColourToneMode tone, gboolean commit);
+
 /* Auto focus */
 static void gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on);
 
@@ -140,6 +150,8 @@ gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
   iface->set_zoom = gst_photo_iface_set_zoom;
   iface->get_iso_speed = gst_photo_iface_get_iso_speed;
   iface->set_iso_speed = gst_photo_iface_set_iso_speed;
+  iface->get_colour_tone_mode = gst_photo_iface_get_colour_tone;
+  iface->set_colour_tone_mode = gst_photo_iface_set_colour_tone;
 
   iface->set_autofocus = gst_photo_iface_set_autofocus;
 
@@ -157,6 +169,7 @@ gst_photo_iface_init_settings (GstDroidCamSrc * src)
   src->photo_settings.wb_mode = GST_PHOTOGRAPHY_WB_MODE_AUTO;
   src->photo_settings.zoom = 1.0;
   src->photo_settings.iso_speed = 0;
+  src->photo_settings.tone_mode = GST_PHOTOGRAPHY_COLOUR_TONE_MODE_NORMAL;
 
   // TODO: more
 }
@@ -178,6 +191,9 @@ gst_photo_iface_add_properties (GObjectClass * gobject_class)
 
   g_object_class_override_property (gobject_class, PROP_ISO_SPEED,
       GST_PHOTOGRAPHY_PROP_ISO_SPEED);
+
+  g_object_class_override_property (gobject_class, PROP_COLOUR_TONE,
+      GST_PHOTOGRAPHY_PROP_COLOUR_TONE);
 
   // TODO: more
 }
@@ -221,6 +237,11 @@ gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,
     case PROP_ISO_SPEED:
       g_value_set_uint (value, _gst_photo_iface_get_iso_speed (src));
       return TRUE;
+
+    case PROP_COLOUR_TONE:
+      g_value_set_enum (value, _gst_photo_iface_get_colour_tone (src));
+      return TRUE;
+
   }
 
   // TODO: more
@@ -253,6 +274,11 @@ gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
     case PROP_ISO_SPEED:
       _gst_photo_iface_set_iso_speed (src, g_value_get_uint (value), TRUE);
       return TRUE;
+
+    case PROP_COLOUR_TONE:
+      _gst_photo_iface_set_colour_tone (src, g_value_get_enum (value), TRUE);
+      return TRUE;
+
   }
 
   // TODO: more
@@ -619,6 +645,77 @@ _gst_photo_iface_set_iso_speed (GstDroidCamSrc * src, guint iso,
   }
 
   camera_params_set (src->camera_params, "iso", val);
+  GST_OBJECT_UNLOCK (src);
+
+  if (!commit) {
+    return TRUE;
+  }
+
+  return klass->set_camera_params (src);
+}
+
+static gboolean
+gst_photo_iface_get_colour_tone (GstPhotography * photo,
+    GstColourToneMode * tone)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_DEBUG_OBJECT (src, "get colour tone");
+
+  *tone = _gst_photo_iface_get_colour_tone (src);
+
+  return TRUE;
+}
+
+static gboolean
+gst_photo_iface_set_colour_tone (GstPhotography * photo, GstColourToneMode tone)
+{
+  return _gst_photo_iface_set_colour_tone (GST_DROID_CAM_SRC (photo), tone,
+      TRUE);
+}
+
+static GstColourToneMode
+_gst_photo_iface_get_colour_tone (GstDroidCamSrc * src)
+{
+  GstColourToneMode tone;
+
+  GST_OBJECT_LOCK (src);
+
+  tone = src->photo_settings.tone_mode;
+
+  GST_DEBUG_OBJECT (src, "returning colour tone %i", tone);
+
+  GST_OBJECT_UNLOCK (src);
+
+  return tone;
+}
+
+static gboolean
+_gst_photo_iface_set_colour_tone (GstDroidCamSrc * src,
+    GstColourToneMode tone, gboolean commit)
+{
+  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+
+  const char *val =
+      gst_camera_settings_find_droid (src->settings->colour_tone_mode, tone);
+
+  GST_DEBUG_OBJECT (src, "set colour tone to %i (%s)", tone, val);
+
+  if (!val) {
+    return FALSE;
+  }
+
+  GST_DEBUG_OBJECT (src, "storing colour tone %i", tone);
+
+  GST_OBJECT_LOCK (src);
+  src->photo_settings.tone_mode = tone;
+
+  if (!src->camera_params) {
+    GST_OBJECT_UNLOCK (src);
+    return TRUE;
+  }
+
+  camera_params_set (src->camera_params, "effect", val);
   GST_OBJECT_UNLOCK (src);
 
   if (!commit) {

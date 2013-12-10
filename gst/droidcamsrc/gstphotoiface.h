@@ -43,6 +43,7 @@ enum
   PROP_WB_MODE,
   PROP_ZOOM,
   PROP_ISO_SPEED,
+  PROP_COLOUR_TONE,
 
   /* end */
   N_PROPS,

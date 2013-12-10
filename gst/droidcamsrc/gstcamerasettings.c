@@ -54,6 +54,8 @@ gst_camera_settings_new ()
   settings->white_balance_mode =
       gst_camera_settings_load (file, "white-balance-mode");
   settings->iso_speed = gst_camera_settings_load (file, "iso-speed");
+  settings->colour_tone_mode =
+      gst_camera_settings_load (file, "colour-tone-mode");
 
 out:
   if (file) {
@@ -88,6 +90,11 @@ gst_camera_settings_destroy (GstCameraSettings * settings)
   if (settings->iso_speed) {
     g_hash_table_destroy (settings->iso_speed);
     settings->iso_speed = NULL;
+  }
+
+  if (settings->colour_tone_mode) {
+    g_hash_table_destroy (settings->colour_tone_mode);
+    settings->colour_tone_mode = NULL;
   }
 
   g_free (settings);
