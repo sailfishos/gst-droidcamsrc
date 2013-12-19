@@ -540,6 +540,7 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   if (src->camera_device == 0) {
     gst_droid_cam_src_apply_image_noise_reduction (src);
     gst_droid_cam_src_adjust_video_torch (src);
+    camera_params_set (src->camera_params, "auto-exposure", "center-weighted");
   }
 
   if (!gst_droid_cam_src_set_callbacks (src)) {
