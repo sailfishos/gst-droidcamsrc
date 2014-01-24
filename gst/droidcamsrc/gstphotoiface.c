@@ -34,6 +34,9 @@
 GST_DEBUG_CATEGORY_STATIC (droidphoto_debug);
 #define GST_CAT_DEFAULT droidphoto_debug
 
+#define MIN_EV_COMP -2.5f
+#define MAX_EV_COMP +2.5f
+
 static void
 gst_photo_iface_implements_interface_init (GstImplementsInterfaceClass * klass);
 static gboolean
@@ -86,6 +89,15 @@ static gboolean gst_photo_iface_set_iso_speed (GstPhotography * photo,
 static guint _gst_photo_iface_get_iso_speed (GstDroidCamSrc * src);
 static gboolean _gst_photo_iface_set_iso_speed (GstDroidCamSrc * src, guint iso,
     gboolean commit);
+
+/* EV comp */
+static gboolean gst_photo_iface_get_ev_compensation (GstPhotography * photo,
+    gfloat * ev);
+static gboolean gst_photo_iface_set_ev_compensation (GstPhotography * photo,
+    gfloat ev);
+static gfloat _gst_photo_iface_get_ev_compensation (GstDroidCamSrc * src);
+static gboolean _gst_photo_iface_set_ev_compensation (GstDroidCamSrc * src,
+    gfloat ev, gboolean commit);
 
 /* Auto focus */
 static void gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on);
@@ -140,6 +152,8 @@ gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
   iface->set_zoom = gst_photo_iface_set_zoom;
   iface->get_iso_speed = gst_photo_iface_get_iso_speed;
   iface->set_iso_speed = gst_photo_iface_set_iso_speed;
+  iface->get_ev_compensation = gst_photo_iface_get_ev_compensation;
+  iface->set_ev_compensation = gst_photo_iface_set_ev_compensation;
 
   iface->set_autofocus = gst_photo_iface_set_autofocus;
 
@@ -157,6 +171,7 @@ gst_photo_iface_init_settings (GstDroidCamSrc * src)
   src->photo_settings.wb_mode = GST_PHOTOGRAPHY_WB_MODE_AUTO;
   src->photo_settings.zoom = 1.0;
   src->photo_settings.iso_speed = 0;
+  src->photo_settings.ev_compensation = 0.0;
 
   // TODO: more
 }
@@ -179,6 +194,9 @@ gst_photo_iface_add_properties (GObjectClass * gobject_class)
   g_object_class_override_property (gobject_class, PROP_ISO_SPEED,
       GST_PHOTOGRAPHY_PROP_ISO_SPEED);
 
+  g_object_class_override_property (gobject_class, PROP_EV_COMP,
+      GST_PHOTOGRAPHY_PROP_EV_COMP);
+
   // TODO: more
 }
 
@@ -193,8 +211,26 @@ gst_photo_iface_settings_to_params (GstDroidCamSrc * src)
       FALSE);
   _gst_photo_iface_set_zoom (src, src->photo_settings.zoom, FALSE);
   _gst_photo_iface_set_iso_speed (src, src->photo_settings.iso_speed, FALSE);
+  _gst_photo_iface_set_ev_compensation (src,
+      src->photo_settings.ev_compensation, FALSE);
 
   // TODO: more
+}
+
+void
+gst_photo_iface_init_ev_comp (GstDroidCamSrc * src)
+{
+  src->min_ev_comp =
+      camera_params_get_int (src->camera_params, "min-exposure-compensation");
+  src->max_ev_comp =
+      camera_params_get_int (src->camera_params, "max-exposure-compensation");
+
+  src->ev_comp_step =
+      ((-1 * src->min_ev_comp) +
+      src->max_ev_comp) / (gfloat) ((-1 * MIN_EV_COMP) + MAX_EV_COMP);
+
+  GST_DEBUG_OBJECT (src, "init ev comp: min = %d, max = %d, step size = %f",
+      src->min_ev_comp, src->max_ev_comp, src->ev_comp_step);
 }
 
 gboolean
@@ -220,6 +256,10 @@ gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,
 
     case PROP_ISO_SPEED:
       g_value_set_uint (value, _gst_photo_iface_get_iso_speed (src));
+      return TRUE;
+
+    case PROP_EV_COMP:
+      g_value_set_float (value, _gst_photo_iface_get_ev_compensation (src));
       return TRUE;
   }
 
@@ -252,6 +292,11 @@ gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
 
     case PROP_ISO_SPEED:
       _gst_photo_iface_set_iso_speed (src, g_value_get_uint (value), TRUE);
+      return TRUE;
+
+    case PROP_EV_COMP:
+      _gst_photo_iface_set_ev_compensation (src, g_value_get_float (value),
+          TRUE);
       return TRUE;
   }
 
@@ -619,6 +664,76 @@ _gst_photo_iface_set_iso_speed (GstDroidCamSrc * src, guint iso,
   }
 
   camera_params_set (src->camera_params, "iso", val);
+  GST_OBJECT_UNLOCK (src);
+
+  if (!commit) {
+    return TRUE;
+  }
+
+  return klass->set_camera_params (src);
+}
+
+static gboolean
+gst_photo_iface_get_ev_compensation (GstPhotography * photo, gfloat * ev)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_DEBUG_OBJECT (src, "get ev comp");
+
+  *ev = _gst_photo_iface_get_ev_compensation (src);
+
+  return TRUE;
+}
+
+static gboolean
+gst_photo_iface_set_ev_compensation (GstPhotography * photo, gfloat ev)
+{
+  return _gst_photo_iface_set_ev_compensation (GST_DROID_CAM_SRC (photo), ev,
+      TRUE);
+}
+
+static gfloat
+_gst_photo_iface_get_ev_compensation (GstDroidCamSrc * src)
+{
+  gfloat ev;
+
+  GST_OBJECT_LOCK (src);
+
+  ev = src->photo_settings.ev_compensation;
+
+  GST_DEBUG_OBJECT (src, "returning ev compensation %f", ev);
+
+  GST_OBJECT_UNLOCK (src);
+
+  return ev;
+}
+
+static gboolean
+_gst_photo_iface_set_ev_compensation (GstDroidCamSrc * src, gfloat ev,
+    gboolean commit)
+{
+  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+  int val = src->ev_comp_step * ev;
+  gchar *string_val = NULL;
+
+  GST_DEBUG_OBJECT (src, "set ev comp to to %f (%d)", ev, val);
+
+  string_val = g_strdup_printf ("%i", val);
+
+  GST_OBJECT_LOCK (src);
+  src->photo_settings.ev_compensation = ev;
+
+  if (!src->camera_params) {
+    GST_OBJECT_UNLOCK (src);
+
+    g_free (string_val);
+
+    return TRUE;
+  }
+
+  camera_params_set (src->camera_params, "exposure-compensation", string_val);
+  g_free (string_val);
+
   GST_OBJECT_UNLOCK (src);
 
   if (!commit) {

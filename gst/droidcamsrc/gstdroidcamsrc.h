@@ -156,6 +156,10 @@ struct _GstDroidCamSrc {
   GstCameraSettings *settings;
 
   gboolean image_noise_reduction;
+
+  int min_ev_comp;
+  int max_ev_comp;
+  gfloat ev_comp_step;
 };
 
 struct _GstDroidCamSrcClass {

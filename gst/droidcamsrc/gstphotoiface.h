@@ -43,6 +43,7 @@ enum
   PROP_WB_MODE,
   PROP_ZOOM,
   PROP_ISO_SPEED,
+  PROP_EV_COMP,
 
   /* end */
   N_PROPS,
@@ -52,6 +53,7 @@ void gst_photo_iface_init (GType type);
 void gst_photo_iface_add_properties (GObjectClass * gobject_class);
 void gst_photo_iface_init_settings (GstDroidCamSrc * src);
 void gst_photo_iface_settings_to_params (GstDroidCamSrc * src);
+void gst_photo_iface_init_ev_comp (GstDroidCamSrc * src);
 
 gboolean gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,
 				       GValue * value, GParamSpec * pspec);

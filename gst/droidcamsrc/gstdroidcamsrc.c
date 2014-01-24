@@ -303,6 +303,9 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->image_noise_reduction = DEFAULT_IMAGE_NOISE_REDUCTION;
   src->max_zoom = DEFAULT_MAX_ZOOM;
   src->video_torch = DEFAULT_VIDEO_TORCH;
+  src->min_ev_comp = 0;
+  src->max_ev_comp = 0;
+  src->ev_comp_step = 0.0;
 
   gst_segment_init (&src->segment, GST_FORMAT_TIME);
 
@@ -534,6 +537,7 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
     free (params);
   }
 
+  gst_photo_iface_init_ev_comp (src);
   gst_photo_iface_settings_to_params (src);
 
   /* TODO: If we end up with a device with 1 camera then this will break. */
