@@ -145,6 +145,8 @@ static void gst_droid_cam_src_boilerplate_init (GType type);
 static void gst_droid_cam_src_send_message (GstDroidCamSrc * src,
     const gchar * msg_name, int status);
 static void gst_droid_cam_src_adjust_video_torch (GstDroidCamSrc * src);
+static gboolean gst_droid_cam_src_handle_roi_event (GstDroidCamSrc * src,
+    GstEvent * event);
 
 GST_BOILERPLATE_FULL (GstDroidCamSrc, gst_droid_cam_src, GstBin,
     GST_TYPE_BIN, gst_droid_cam_src_boilerplate_init);
@@ -165,6 +167,15 @@ typedef struct
   GstBuffer *buffer;
   GstDroidCamSrc *src;
 } GstDroidCamSrcVideoBufferData;
+
+typedef struct
+{
+  guint x;
+  guint y;
+  guint w;
+  guint h;
+  guint p;
+} RoiEntry;
 
 static void
 gst_droid_cam_src_boilerplate_init (GType type)
@@ -877,8 +888,17 @@ gst_droid_cam_src_send_event (GstElement * element, GstEvent * event)
 
       break;
 
+    case GST_EVENT_CUSTOM_UPSTREAM:{
+      const GstStructure *s = gst_event_get_structure (event);
+      if (s && gst_structure_has_name (s, "regions-of-interest")) {
+        GST_INFO_OBJECT (src, "Got ROI event %p" GST_PTR_FORMAT, s);
+        ret = gst_droid_cam_src_handle_roi_event (src, event);
+        event = NULL;
+        break;
+      }
+    }
+
     case GST_EVENT_CUSTOM_DOWNSTREAM:
-    case GST_EVENT_CUSTOM_UPSTREAM:
     case GST_EVENT_UNKNOWN:
     case GST_EVENT_TAG:
     case GST_EVENT_CUSTOM_DOWNSTREAM_OOB:
@@ -1960,4 +1980,127 @@ gst_droid_cam_src_adjust_video_torch (GstDroidCamSrc * src)
   } else {
     gst_photo_iface_update_flash_mode (src);
   }
+}
+
+static gboolean
+gst_droid_cam_src_handle_roi_event (GstDroidCamSrc * src, GstEvent * event)
+{
+  guint width, height, objcount, i, supported_regions;
+  const GValue *regions, *region;
+  const GstStructure *rs;
+  gboolean ret = FALSE;
+  GArray *array = g_array_new (FALSE, FALSE, sizeof (RoiEntry));
+  const GstStructure *s = gst_event_get_structure (event);
+  gboolean reset = FALSE;
+  gchar *param = NULL;
+  gfloat scaleX = 0.0, scaleY = 0.0;
+
+  if (!gst_structure_get_uint (s, "frame-width", &width) ||
+      !gst_structure_get_uint (s, "frame-height", &height)) {
+    GST_WARNING_OBJECT (src, "missing frame width or height from ROI event");
+    goto out;
+  }
+
+  scaleX = 2000.0 / width;
+  scaleY = 2000.0 / height;
+
+  GST_DEBUG_OBJECT (src, "X scale = %f, Y scale = %f", scaleX, scaleY);
+
+  regions = gst_structure_get_value (s, "regions");
+  if (!regions) {
+    GST_WARNING_OBJECT (src, "ROI event missing regions data");
+    goto out;
+  }
+
+  objcount = gst_value_list_get_size (regions);
+  supported_regions =
+      camera_params_get_int (src->camera_params, "max-num-focus-areas");
+  if (objcount > supported_regions) {
+    GST_DEBUG_OBJECT (src, "HAL supports only %d regions out of %d sent",
+        supported_regions, objcount);
+    objcount = supported_regions;
+  }
+
+  for (i = 0; i < objcount; i++) {
+    region = gst_value_list_get_value (regions, i);
+    rs = gst_value_get_structure (region);
+
+    guint x, y, w, h, p;
+    if (!gst_structure_get_uint (rs, "region-x", &x) ||
+        !gst_structure_get_uint (rs, "region-y", &y) ||
+        !gst_structure_get_uint (rs, "region-w", &w) ||
+        !gst_structure_get_uint (rs, "region-h", &h)) {
+      GST_WARNING_OBJECT (src, "ROI %d has incomplete information", i);
+      continue;
+    }
+
+    if (!gst_structure_get_uint (rs, "region-priority", &p)) {
+      p = 1;
+    }
+
+    GST_DEBUG_OBJECT (src, "ROI %d info: x=%d, y=%d, w=%d, h=%d, p=%d", i, x, y,
+        w, h, p);
+
+    RoiEntry roi;
+    roi.x = x;
+    roi.y = y;
+    roi.w = w;
+    roi.h = h;
+    roi.p = p;
+
+    g_array_append_val (array, roi);
+  }
+
+  if (array->len == 0) {
+    GST_INFO_OBJECT (src, "empty ROI array. Doing nothing");
+    goto out;
+  }
+
+  /* If we have any entry with priority set to 0 then we reset. */
+  for (i = 0; i < array->len; i++) {
+    RoiEntry entry = g_array_index (array, RoiEntry, i);
+    GST_INFO_OBJECT (src, "ROI entry %d has p = 0", i);
+    if (entry.p == 0) {
+      reset = TRUE;
+      break;
+    }
+  }
+
+  if (reset) {
+    GST_INFO_OBJECT (src, "resetting roi");
+    camera_params_set (src->camera_params, "focus-areas", "(0, 0, 0, 0, 0)");
+    goto update_and_out;
+  }
+
+  for (i = 0; i < array->len; i++) {
+    RoiEntry entry = g_array_index (array, RoiEntry, i);
+    gint x = (scaleX * entry.x),
+        y = (scaleY * entry.y),
+        r = (entry.x + entry.w) * scaleX, b = (entry.y + entry.h) * scaleY;
+
+    gchar *str =
+        g_strdup_printf ("(%d, %d, %d, %d, %d)", x - 1000, y - 1000, r - 1000,
+        b - 1000, entry.p);
+    if (param) {
+      gchar *old_param = param;
+      param = g_strjoin (",", old_param, src, NULL);
+      g_free (old_param);
+      g_free (str);
+    } else {
+      param = str;
+    }
+  }
+
+  camera_params_set (src->camera_params, "focus-areas", param);
+  GST_DEBUG_OBJECT (src, "Setting roi param %s", param);
+
+  g_free (param);
+
+update_and_out:
+  ret = gst_droid_cam_src_set_camera_params (src);
+
+out:
+  g_array_unref (array);
+  gst_event_unref (event);
+  return ret;
 }
