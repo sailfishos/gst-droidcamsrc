@@ -326,6 +326,8 @@ gst_droid_cam_src_init (GstDroidCamSrc * src, GstDroidCamSrcClass * gclass)
   src->image_renegotiate = TRUE;
   src->video_renegotiate = TRUE;
 
+  g_mutex_init (&src->params_lock);
+
   g_mutex_init (&src->img_lock);
   g_cond_init (&src->img_cond);
   src->img_task_running = FALSE;
@@ -380,6 +382,8 @@ gst_droid_cam_src_finalize (GObject * object)
     g_list_free (src->events);
     src->events = NULL;
   }
+
+  g_mutex_clear (&src->params_lock);
 
   g_mutex_clear (&src->capturing_mutex);
 
@@ -540,6 +544,7 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
 
   src->dev = (camera_device_t *) src->cam_dev;
 
+  g_mutex_lock (&src->params_lock);
   params = src->dev->ops->get_parameters (src->dev);
   src->camera_params = camera_params_from_string (params);
   if (src->dev->ops->put_parameters) {
@@ -547,6 +552,7 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   } else {
     free (params);
   }
+  g_mutex_unlock (&src->params_lock);
 
   gst_photo_iface_init_ev_comp (src);
   gst_photo_iface_settings_to_params (src);
@@ -713,9 +719,14 @@ gst_droid_cam_src_set_camera_params (GstDroidCamSrc * src)
 
   GST_DEBUG_OBJECT (src, "set params");
 
+  GST_OBJECT_LOCK (src);
   params = camera_params_to_string (src->camera_params);
+  GST_OBJECT_UNLOCK (src);
+
+  g_mutex_lock (&src->params_lock);
   err = src->dev->ops->set_parameters (src->dev, params);
   free (params);
+  g_mutex_unlock (&src->params_lock);
 
   if (err != 0) {
     GST_ELEMENT_ERROR (src, LIBRARY, INIT,
@@ -1874,6 +1885,8 @@ gst_droid_cam_src_apply_image_noise_reduction (GstDroidCamSrc * src)
     return;
   }
 
+  GST_OBJECT_LOCK (src);
+
   if (src->mode != MODE_IMAGE) {
     GST_LOG_OBJECT (src, "Disabling image noise reduction in video mode");
     camera_params_set (src->camera_params, "denoise", "denoise-off");
@@ -1884,6 +1897,8 @@ gst_droid_cam_src_apply_image_noise_reduction (GstDroidCamSrc * src)
     GST_LOG_OBJECT (src, "Disabling image noise reduction");
     camera_params_set (src->camera_params, "denoise", "denoise-off");
   }
+
+  GST_OBJECT_UNLOCK (src);
 
   gst_droid_cam_src_set_camera_params (src);
 }
@@ -1906,6 +1921,7 @@ gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src)
     return;
   }
 
+  g_mutex_lock (&src->params_lock);
   params = src->dev->ops->get_parameters (src->dev);
   camera_params = camera_params_from_string (params);
 
@@ -1914,6 +1930,7 @@ gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src)
   } else {
     free (params);
   }
+  g_mutex_unlock (&src->params_lock);
 
   /* 0  -> 1.0
    * 1  -> 1.1
@@ -1970,7 +1987,9 @@ gst_droid_cam_src_adjust_video_torch (GstDroidCamSrc * src)
   }
 
   if (src->video_torch) {
+    GST_OBJECT_LOCK (src);
     camera_params_set (src->camera_params, "flash-mode", "torch");
+    GST_OBJECT_UNLOCK (src);
     if (!klass->set_camera_params (src)) {
       GST_WARNING_OBJECT (src, "Failed to set video torch");
       gst_photo_iface_update_flash_mode (src);
@@ -2068,7 +2087,9 @@ gst_droid_cam_src_handle_roi_event (GstDroidCamSrc * src, GstEvent * event)
 
   if (reset) {
     GST_INFO_OBJECT (src, "resetting roi");
+    GST_OBJECT_LOCK (src);
     camera_params_set (src->camera_params, "focus-areas", "(0, 0, 0, 0, 0)");
+    GST_OBJECT_UNLOCK (src);
     goto update_and_out;
   }
 
@@ -2091,7 +2112,9 @@ gst_droid_cam_src_handle_roi_event (GstDroidCamSrc * src, GstEvent * event)
     }
   }
 
+  GST_OBJECT_LOCK (src);
   camera_params_set (src->camera_params, "focus-areas", param);
+  GST_OBJECT_UNLOCK (src);
   GST_DEBUG_OBJECT (src, "Setting roi param %s", param);
 
   g_free (param);

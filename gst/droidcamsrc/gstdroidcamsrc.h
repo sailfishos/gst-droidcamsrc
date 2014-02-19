@@ -96,6 +96,7 @@ struct _GstDroidCamSrc {
   camera_device_t *dev;
 
   struct camera_params *camera_params;
+  GMutex params_lock;
 
   GstCameraBufferPool *pool;
 
