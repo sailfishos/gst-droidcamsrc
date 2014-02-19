@@ -2004,14 +2004,15 @@ gst_droid_cam_src_adjust_video_torch (GstDroidCamSrc * src)
 static gboolean
 gst_droid_cam_src_handle_roi_event (GstDroidCamSrc * src, GstEvent * event)
 {
-  guint width, height, objcount, i, supported_regions;
+  guint width, height, objcount, i;
+  guint supported_focus_regions, supported_metering_regions, supported_regions;
   const GValue *regions, *region;
   const GstStructure *rs;
   gboolean ret = FALSE;
   GArray *array = g_array_new (FALSE, FALSE, sizeof (RoiEntry));
   const GstStructure *s = gst_event_get_structure (event);
   gboolean reset = FALSE;
-  gchar *param = NULL;
+  gchar *focus_param = NULL, *metering_param = NULL;
   gfloat scaleX = 0.0, scaleY = 0.0;
 
   if (!gst_structure_get_uint (s, "frame-width", &width) ||
@@ -2031,9 +2032,16 @@ gst_droid_cam_src_handle_roi_event (GstDroidCamSrc * src, GstEvent * event)
     goto out;
   }
 
-  objcount = gst_value_list_get_size (regions);
-  supported_regions =
+  GST_OBJECT_LOCK (src);
+  supported_focus_regions =
       camera_params_get_int (src->camera_params, "max-num-focus-areas");
+  supported_metering_regions =
+      camera_params_get_int (src->camera_params, "max-num-focus-areas");
+  GST_OBJECT_UNLOCK (src);
+
+  objcount = gst_value_list_get_size (regions);
+  supported_regions = supported_focus_regions > supported_metering_regions
+          ? supported_focus_regions : supported_metering_regions;
   if (objcount > supported_regions) {
     GST_DEBUG_OBJECT (src, "HAL supports only %d regions out of %d sent",
         supported_regions, objcount);
@@ -2102,22 +2110,35 @@ gst_droid_cam_src_handle_roi_event (GstDroidCamSrc * src, GstEvent * event)
     gchar *str =
         g_strdup_printf ("(%d, %d, %d, %d, %d)", x - 1000, y - 1000, r - 1000,
         b - 1000, entry.p);
-    if (param) {
-      gchar *old_param = param;
-      param = g_strjoin (",", old_param, src, NULL);
+    if (focus_param && i < supported_focus_regions) {
+      gchar *old_param = focus_param;
+      focus_param = g_strjoin (",", old_param, src, NULL);
       g_free (old_param);
-      g_free (str);
-    } else {
-      param = str;
+    } else if (i < supported_focus_regions) {
+      focus_param = strdup (str);
     }
+    if (metering_param && i < supported_metering_regions) {
+      gchar *old_param = metering_param;
+      metering_param = g_strjoin (",", old_param, src, NULL);
+      g_free (old_param);
+    } else if (i < supported_metering_regions) {
+      metering_param = strdup (str);
+    }
+    g_free (str);
   }
 
   GST_OBJECT_LOCK (src);
-  camera_params_set (src->camera_params, "focus-areas", param);
+  if (focus_param) {
+    GST_DEBUG_OBJECT (src, "Setting focus roi param %s", focus_param);
+    camera_params_set (src->camera_params, "focus-areas", focus_param);
+    g_free (focus_param);
+  }
+  if (metering_param) {
+    GST_DEBUG_OBJECT (src, "Setting metering roi param %s", metering_param);
+    camera_params_set (src->camera_params, "metering-areas", metering_param);
+    g_free (metering_param);
+  }
   GST_OBJECT_UNLOCK (src);
-  GST_DEBUG_OBJECT (src, "Setting roi param %s", param);
-
-  g_free (param);
 
 update_and_out:
   ret = gst_droid_cam_src_set_camera_params (src);
