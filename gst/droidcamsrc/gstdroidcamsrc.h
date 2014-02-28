@@ -100,7 +100,7 @@ struct _GstDroidCamSrc {
   struct hw_device_t *cam_dev;
   camera_device_t *dev;
 
-  struct camera_params *camera_params;
+  GstStructure *camera_params;
   GMutex params_lock;
 
   gint user_camera_device;
@@ -146,6 +146,8 @@ struct _GstDroidCamSrc {
 
   /* photography interface bits */
   GstPhotographySettings photo_settings;
+  gint *zoom_ratios;
+  gint num_zoom_ratios;
   gfloat max_zoom;
   gboolean video_torch;
 
@@ -153,8 +155,6 @@ struct _GstDroidCamSrc {
 
   gboolean image_noise_reduction;
 
-  int min_ev_comp;
-  int max_ev_comp;
   gfloat ev_comp_step;
 };
 

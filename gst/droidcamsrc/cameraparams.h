@@ -25,24 +25,32 @@
 
 G_BEGIN_DECLS
 
-struct camera_params;
+GstStructure *camera_params_from_string(const gchar *str);
+void camera_params_update (GstStructure *params, const gchar *str);
+char *camera_params_to_string(GstStructure *params);
 
-struct camera_params *camera_params_from_string(const char *str);
-void camera_params_update (struct camera_params *params, const char *str);
-void camera_params_free(struct camera_params *params);
-char *camera_params_to_string(struct camera_params *params);
-void camera_params_dump(struct camera_params *params);
-void camera_params_set(struct camera_params *params, const char *key, const char *val);
-GstCaps *camera_params_get_viewfinder_caps (struct camera_params *params);
-GstCaps *camera_params_get_capture_caps (struct camera_params *params);
-void camera_params_set_viewfinder_size (struct camera_params *params, int width, int height);
-void camera_params_set_capture_size (struct camera_params *params, int width, int height);
-void camera_params_set_viewfinder_fps (struct camera_params *params, int fps);
-void camera_params_set_viewfinder_format (struct camera_params *params, const gchar *format);
-GstCaps *camera_params_get_video_caps (struct camera_params *params);
-void camera_params_set_video_size (struct camera_params *params, int width, int height);
-int camera_params_get_int (struct camera_params *params, const char *key);
-void camera_params_set_int(struct camera_params *params, const char *key, int val);
+const gchar *camera_params_get (GstStructure *params, const gchar *key);
+void camera_params_set (GstStructure *params, const gchar *key, const gchar *val);
+
+int camera_params_get_int (GstStructure *params, const gchar *key);
+void camera_params_set_int(GstStructure *params, const gchar *key, int val);
+
+gboolean camera_params_get_resolution (GstStructure *params, const gchar *key,
+    gint *width, gint *height);
+void camera_params_set_resolution (GstStructure *params, const gchar *key,
+    int width, int height);
+
+const gchar *camera_params_get_format (GstStructure *params, const gchar *key);
+gboolean camera_params_set_format (GstStructure *params, const gchar *key,
+    const gchar *format);
+
+typedef void (*CameraParamsFunc)(const gchar *value, gpointer user_data);
+gboolean camera_params_foreach (GstStructure *params, const gchar *key,
+    CameraParamsFunc func, gpointer user_data);
+
+GstCaps *camera_params_get_viewfinder_caps (GstStructure *params);
+GstCaps *camera_params_get_capture_caps (GstStructure *params);
+GstCaps *camera_params_get_video_caps (GstStructure *params);
 
 G_END_DECLS
 

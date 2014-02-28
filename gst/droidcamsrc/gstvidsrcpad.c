@@ -210,8 +210,8 @@ gst_vid_src_pad_renegotiate (GstPad * pad)
     ret = gst_video_info_from_caps (&info, caps);
 
     GST_OBJECT_LOCK (src);
-    camera_params_set_video_size (src->camera_params, info.width,
-        info.height);
+    camera_params_set_resolution (src->camera_params, "video-size",
+        info.width, info.height);
     GST_OBJECT_UNLOCK (src);
   } else {
     GST_ERROR_OBJECT (src,

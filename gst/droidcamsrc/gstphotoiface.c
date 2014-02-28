@@ -24,26 +24,25 @@
 #include "gstphotoiface.h"
 #ifndef GST_USE_UNSTABLE_API
 #define GST_USE_UNSTABLE_API
-#include <gst/interfaces/photography.h>
 #include <gst/basecamerabinsrc/gstbasecamerasrc.h>
 #undef GST_USE_UNSTABLE_API
 #endif /* GST_USE_UNSTABLE_API */
 #include "gstdroidcamsrc.h"
 #include "cameraparams.h"
+#include "gstimgsrcpad.h"
+#include "gstvfsrcpad.h"
+#include <math.h>
+#include <stdlib.h>
 
 GST_DEBUG_CATEGORY_STATIC (droidphoto_debug);
 #define GST_CAT_DEFAULT droidphoto_debug
-
-#define MIN_EV_COMP -2.5f
-#define MAX_EV_COMP +2.5f
 
 /* Flash */
 static gboolean gst_photo_iface_get_flash_mode (GstPhotography * photo,
     GstPhotographyFlashMode * flash);
 static gboolean gst_photo_iface_set_flash_mode (GstPhotography * photo,
     GstPhotographyFlashMode flash);
-static GstPhotographyFlashMode _gst_photo_iface_get_flash_mode (GstDroidCamSrc * src);
-static gboolean _gst_photo_iface_set_flash_mode (GstDroidCamSrc * src,
+static gboolean gst_photo_iface_set_flash_mode_unlocked (GstDroidCamSrc * src,
     GstPhotographyFlashMode flash, gboolean commit);
 
 /* Focus */
@@ -51,8 +50,7 @@ static gboolean gst_photo_iface_get_focus_mode (GstPhotography * photo,
     GstPhotographyFocusMode * focus);
 static gboolean gst_photo_iface_set_focus_mode (GstPhotography * photo,
     GstPhotographyFocusMode focus);
-static GstPhotographyFocusMode _gst_photo_iface_get_focus_mode (GstDroidCamSrc * src);
-static gboolean _gst_photo_iface_set_focus_mode (GstDroidCamSrc * src,
+static gboolean gst_photo_iface_set_focus_mode_unlocked (GstDroidCamSrc * src,
     GstPhotographyFocusMode focus, gboolean commit);
 
 /* White balance */
@@ -60,39 +58,99 @@ static gboolean gst_photo_iface_get_white_balance_mode (GstPhotography * photo,
     GstPhotographyWhiteBalanceMode * wb);
 static gboolean gst_photo_iface_set_white_balance_mode (GstPhotography * photo,
     GstPhotographyWhiteBalanceMode wb);
-static GstPhotographyWhiteBalanceMode _gst_photo_iface_get_white_balance_mode
-    (GstDroidCamSrc * src);
-static gboolean _gst_photo_iface_set_white_balance_mode (GstDroidCamSrc * src,
-    GstPhotographyWhiteBalanceMode wb, gboolean commit);
+static gboolean gst_photo_iface_set_white_balance_mode_unlocked
+    (GstDroidCamSrc * src, GstPhotographyWhiteBalanceMode wb, gboolean commit);
 
 /* zoom */
 static gboolean gst_photo_iface_get_zoom (GstPhotography * photo,
     gfloat * zoom);
 static gboolean gst_photo_iface_set_zoom (GstPhotography * photo, gfloat zoom);
-static gfloat _gst_photo_iface_get_zoom (GstDroidCamSrc * src);
-static gboolean _gst_photo_iface_set_zoom (GstDroidCamSrc * src, gfloat zoom,
-    gboolean commit);
+static gboolean gst_photo_iface_set_zoom_unlocked (GstDroidCamSrc * src,
+    gfloat zoom, gboolean commit);
 
 /* ISO */
 static gboolean gst_photo_iface_get_iso_speed (GstPhotography * photo,
     guint * iso);
 static gboolean gst_photo_iface_set_iso_speed (GstPhotography * photo,
     guint iso);
-static guint _gst_photo_iface_get_iso_speed (GstDroidCamSrc * src);
-static gboolean _gst_photo_iface_set_iso_speed (GstDroidCamSrc * src, guint iso,
-    gboolean commit);
+static gboolean gst_photo_iface_set_iso_speed_unlocked (GstDroidCamSrc * src,
+    guint iso, gboolean commit);
 
 /* EV comp */
 static gboolean gst_photo_iface_get_ev_compensation (GstPhotography * photo,
     gfloat * ev);
 static gboolean gst_photo_iface_set_ev_compensation (GstPhotography * photo,
     gfloat ev);
-static gfloat _gst_photo_iface_get_ev_compensation (GstDroidCamSrc * src);
-static gboolean _gst_photo_iface_set_ev_compensation (GstDroidCamSrc * src,
-    gfloat ev, gboolean commit);
+static gboolean gst_photo_iface_set_ev_compensation_unlocked
+    (GstDroidCamSrc * src, gfloat ev, gboolean commit);
+
+/* Color tone mode */
+static gboolean gst_photo_iface_get_color_tone_mode (GstPhotography * photo,
+    GstPhotographyColorToneMode * mode);
+static gboolean gst_photo_iface_set_color_tone_mode (GstPhotography * photo,
+    GstPhotographyColorToneMode mode);
+static gboolean gst_photo_iface_set_color_tone_mode_unlocked
+    (GstDroidCamSrc * src, GstPhotographyColorToneMode mode, gboolean commit);
+
+/* Scene mode */
+static gboolean gst_photo_iface_get_scene_mode (GstPhotography * photo,
+    GstPhotographySceneMode * mode);
+static gboolean gst_photo_iface_set_scene_mode (GstPhotography * photo,
+    GstPhotographySceneMode mode);
+static gboolean gst_photo_iface_set_scene_mode_unlocked (GstDroidCamSrc * src,
+    GstPhotographySceneMode mode, gboolean commit);
+
+/* Flicker reduction */
+static gboolean gst_photo_iface_get_flicker_mode (GstPhotography * photo,
+    GstPhotographyFlickerReductionMode * mode);
+static gboolean gst_photo_iface_set_flicker_mode (GstPhotography * photo,
+    GstPhotographyFlickerReductionMode mode);
+static gboolean gst_photo_iface_set_flicker_mode_unlocked (GstDroidCamSrc * src,
+    GstPhotographyFlickerReductionMode mode, gboolean commit);
+
+/* Auto exposure */
+static gboolean gst_photo_iface_set_exposure_mode_unlocked (GstDroidCamSrc * src,
+    GstPhotographyExposureMode mode, gboolean commit);
+
+/* Capabilities */
+static  GstPhotographyCaps gst_photo_iface_get_capabilities
+    (GstPhotography * photo);
+static  GstPhotographyCaps gst_photo_iface_get_capabilities_unlocked
+    (GstDroidCamSrc *src);
 
 /* Auto focus */
 static void gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on);
+
+static gboolean gst_photo_iface_get_config (GstPhotography * photo,
+    GstPhotographySettings * config);
+static gboolean gst_photo_iface_set_config (GstPhotography * photo,
+    GstPhotographySettings * config);
+
+static gboolean
+gst_photo_iface_set_enum_parameter_unlocked (GstDroidCamSrc * src,
+    GHashTable *table, const gchar *parameter, int enumeration, gboolean commit)
+{
+  gboolean ret = TRUE;
+  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+
+  const char *val = gst_camera_settings_find_droid (table, enumeration);
+
+  GST_DEBUG_OBJECT (src, "set %s to %i (%s)", parameter, enumeration, val);
+
+  if (!val) {
+    ret = FALSE;
+  } else if (src->camera_params) {
+    camera_params_set (src->camera_params, parameter, val);
+
+    if (commit) {
+      GST_OBJECT_UNLOCK (src);
+      ret = klass->set_camera_params (src);
+      GST_OBJECT_LOCK (src);
+    }
+  }
+
+  return ret;
+}
 
 void
 gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
@@ -109,6 +167,15 @@ gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
   iface->set_iso_speed = gst_photo_iface_set_iso_speed;
   iface->get_ev_compensation = gst_photo_iface_get_ev_compensation;
   iface->set_ev_compensation = gst_photo_iface_set_ev_compensation;
+  iface->get_color_tone_mode = gst_photo_iface_get_color_tone_mode;
+  iface->set_color_tone_mode = gst_photo_iface_set_color_tone_mode;
+  iface->get_scene_mode = gst_photo_iface_get_scene_mode;
+  iface->set_scene_mode = gst_photo_iface_set_scene_mode;
+  iface->get_flicker_mode = gst_photo_iface_get_flicker_mode;
+  iface->set_flicker_mode = gst_photo_iface_set_flicker_mode;
+  iface->get_capabilities = gst_photo_iface_get_capabilities;
+  iface->get_config = gst_photo_iface_get_config;
+  iface->set_config = gst_photo_iface_set_config;
 
   iface->set_autofocus = gst_photo_iface_set_autofocus;
 
@@ -131,8 +198,18 @@ gst_photo_iface_init_settings (GstDroidCamSrc * src)
   src->photo_settings.zoom = 1.0;
   src->photo_settings.iso_speed = 0;
   src->photo_settings.ev_compensation = 0.0;
-
-  // TODO: more
+  src->photo_settings.tone_mode = GST_PHOTOGRAPHY_COLOR_TONE_MODE_NORMAL;
+  src->photo_settings.scene_mode = GST_PHOTOGRAPHY_SCENE_MODE_MANUAL;
+  src->photo_settings.aperture = 0;
+  src->photo_settings.exposure_time = 0;
+  src->photo_settings.flicker_mode = GST_PHOTOGRAPHY_FLICKER_REDUCTION_AUTO;
+  src->photo_settings.noise_reduction = 0;
+  src->photo_settings.exposure_mode = GST_PHOTOGRAPHY_EXPOSURE_MODE_AUTO;
+  src->photo_settings.color_temperature = 0;
+  src->photo_settings.analog_gain = 0.0f;
+  src->photo_settings.lens_focus = 0.0f;
+  src->photo_settings.min_exposure_time = 0;
+  src->photo_settings.max_exposure_time = 0;
 }
 
 void
@@ -156,275 +233,370 @@ gst_photo_iface_add_properties (GObjectClass * gobject_class)
   g_object_class_override_property (gobject_class, PROP_EV_COMP,
       GST_PHOTOGRAPHY_PROP_EV_COMP);
 
-  // TODO: more
+  g_object_class_override_property (gobject_class, PROP_COLOR_TONE,
+      GST_PHOTOGRAPHY_PROP_COLOR_TONE);
+
+  g_object_class_override_property (gobject_class, PROP_SCENE_MODE,
+      GST_PHOTOGRAPHY_PROP_SCENE_MODE);
+
+  g_object_class_override_property (gobject_class, PROP_NOISE_REDUCTION,
+      GST_PHOTOGRAPHY_PROP_NOISE_REDUCTION);
+
+  g_object_class_override_property (gobject_class, PROP_CAPABILITIES,
+      GST_PHOTOGRAPHY_PROP_CAPABILITIES);
+
+  g_object_class_override_property (gobject_class, PROP_APERTURE,
+      GST_PHOTOGRAPHY_PROP_APERTURE);
+
+  g_object_class_override_property (gobject_class, PROP_EXPOSURE,
+      GST_PHOTOGRAPHY_PROP_EXPOSURE_TIME);
+
+  g_object_class_override_property (gobject_class, PROP_IMAGE_CAPTURE_SUPPORTED_CAPS,
+      GST_PHOTOGRAPHY_PROP_IMAGE_CAPTURE_SUPPORTED_CAPS);
+
+  g_object_class_override_property (gobject_class, PROP_IMAGE_PREVIEW_SUPPORTED_CAPS,
+      GST_PHOTOGRAPHY_PROP_IMAGE_PREVIEW_SUPPORTED_CAPS);
+
+  g_object_class_override_property (gobject_class, PROP_FLICKER_MODE,
+      GST_PHOTOGRAPHY_PROP_FLICKER_MODE);
+
+  g_object_class_override_property (gobject_class, PROP_COLOR_TEMPERATURE,
+      GST_PHOTOGRAPHY_PROP_COLOR_TEMPERATURE);
+
+  g_object_class_override_property (gobject_class, PROP_WHITE_POINT,
+      GST_PHOTOGRAPHY_PROP_WHITE_POINT);
+
+  g_object_class_override_property (gobject_class, PROP_ANALOG_GAIN,
+      GST_PHOTOGRAPHY_PROP_ANALOG_GAIN);
+
+  g_object_class_install_property (gobject_class, PROP_EXPOSURE_MODE,
+      g_param_spec_enum (GST_PHOTOGRAPHY_PROP_EXPOSURE_MODE,
+          "Exposure mode property",
+          "Exposure mode determines how exposure time is derived",
+          GST_TYPE_PHOTOGRAPHY_EXPOSURE_MODE,
+          GST_PHOTOGRAPHY_EXPOSURE_MODE_AUTO,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_override_property (gobject_class, PROP_LENS_FOCUS,
+      GST_PHOTOGRAPHY_PROP_LENS_FOCUS);
+
+  g_object_class_override_property (gobject_class, PROP_MIN_EXPOSURE_TIME,
+      GST_PHOTOGRAPHY_PROP_MIN_EXPOSURE_TIME);
+
+  g_object_class_override_property (gobject_class, PROP_MAX_EXPOSURE_TIME,
+      GST_PHOTOGRAPHY_PROP_MAX_EXPOSURE_TIME);
 }
 
 void
-gst_photo_iface_settings_to_params (GstDroidCamSrc * src)
+gst_photo_iface_settings_to_params (GstDroidCamSrc * src,
+    GstPhotographySettings * settings)
 {
   GST_DEBUG_OBJECT (src, "settings to params");
 
-  _gst_photo_iface_set_flash_mode (src, src->photo_settings.flash_mode, FALSE);
-  _gst_photo_iface_set_focus_mode (src, src->photo_settings.focus_mode, FALSE);
-  _gst_photo_iface_set_white_balance_mode (src, src->photo_settings.wb_mode,
+  gst_photo_iface_set_flash_mode_unlocked (src, settings->flash_mode, FALSE);
+  gst_photo_iface_set_focus_mode_unlocked (src, settings->focus_mode, FALSE);
+  gst_photo_iface_set_white_balance_mode_unlocked (src, settings->wb_mode,
       FALSE);
-  _gst_photo_iface_set_zoom (src, src->photo_settings.zoom, FALSE);
-  _gst_photo_iface_set_iso_speed (src, src->photo_settings.iso_speed, FALSE);
-  _gst_photo_iface_set_ev_compensation (src,
-      src->photo_settings.ev_compensation, FALSE);
-
-  // TODO: more
+  gst_photo_iface_set_zoom_unlocked (src, settings->zoom, FALSE);
+  gst_photo_iface_set_iso_speed_unlocked (src, settings->iso_speed, FALSE);
+  gst_photo_iface_set_ev_compensation_unlocked (src, settings->ev_compensation,
+      FALSE);
+  gst_photo_iface_set_color_tone_mode_unlocked (src, settings->tone_mode,
+      FALSE);
+  gst_photo_iface_set_scene_mode_unlocked (src, settings->scene_mode, FALSE);
+  gst_photo_iface_set_flicker_mode_unlocked (src, settings->flicker_mode,
+      FALSE);
+  gst_photo_iface_set_exposure_mode_unlocked (src, settings->exposure_mode,
+      FALSE);
 }
 
 void
 gst_photo_iface_init_ev_comp (GstDroidCamSrc * src)
 {
-  src->min_ev_comp =
-      camera_params_get_int (src->camera_params, "min-exposure-compensation");
-  src->max_ev_comp =
-      camera_params_get_int (src->camera_params, "max-exposure-compensation");
+  const gchar *value = camera_params_get (src->camera_params,
+      "exposure-compensation-step");
+  if (value) {
+    src->ev_comp_step = atof (value);
+  } else {
+    src->ev_comp_step = 1.0f;
+  }
 
-  src->ev_comp_step =
-      ((-1 * src->min_ev_comp) +
-      src->max_ev_comp) / (gfloat) ((-1 * MIN_EV_COMP) + MAX_EV_COMP);
-
-  GST_DEBUG_OBJECT (src, "init ev comp: min = %d, max = %d, step size = %f",
-      src->min_ev_comp, src->max_ev_comp, src->ev_comp_step);
+  GST_DEBUG_OBJECT (src, "init ev comp: step size = %f", src->ev_comp_step);
 }
 
 gboolean
 gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
+  gboolean ret = TRUE;
+
+  GST_OBJECT_LOCK (src);
   switch (prop_id) {
     case PROP_FLASH_MODE:
-      g_value_set_enum (value, _gst_photo_iface_get_flash_mode (src));
-      return TRUE;
+      g_value_set_enum (value, src->photo_settings.flash_mode);
+      break;
 
     case PROP_FOCUS_MODE:
-      g_value_set_enum (value, _gst_photo_iface_get_focus_mode (src));
-      return TRUE;
+      g_value_set_enum (value, src->photo_settings.focus_mode);
+      break;
 
     case PROP_WB_MODE:
-      g_value_set_enum (value, _gst_photo_iface_get_white_balance_mode (src));
-      return TRUE;
+      g_value_set_enum (value, src->photo_settings.wb_mode);
+      break;
 
     case PROP_ZOOM:
-      g_value_set_float (value, _gst_photo_iface_get_zoom (src));
-      return TRUE;
+      g_value_set_float (value, src->photo_settings.zoom);
+      break;
 
     case PROP_ISO_SPEED:
-      g_value_set_uint (value, _gst_photo_iface_get_iso_speed (src));
-      return TRUE;
+      g_value_set_uint (value, src->photo_settings.iso_speed);
+      break;
 
     case PROP_EV_COMP:
-      g_value_set_float (value, _gst_photo_iface_get_ev_compensation (src));
-      return TRUE;
+      g_value_set_float (value, src->photo_settings.ev_compensation);
+      break;
+
+    case PROP_COLOR_TONE:
+      g_value_set_enum (value, src->photo_settings.tone_mode);
+      break;
+
+    case PROP_SCENE_MODE:
+      g_value_set_enum (value, src->photo_settings.scene_mode);
+      break;
+
+    case PROP_NOISE_REDUCTION:
+      g_value_set_enum (value, src->photo_settings.noise_reduction);
+      break;
+
+    case PROP_CAPABILITIES:
+      g_value_set_enum (value, gst_photo_iface_get_capabilities_unlocked (src));
+      break;
+
+    case PROP_APERTURE:
+      g_value_set_uint (value, src->photo_settings.aperture);
+      break;
+
+    case PROP_EXPOSURE:
+      g_value_set_uint (value, src->photo_settings.exposure_time);
+      break;
+
+    case PROP_IMAGE_CAPTURE_SUPPORTED_CAPS:
+      gst_value_set_caps (value, gst_img_src_pad_get_supported_caps_unlocked
+          (src));
+      break;
+
+    case PROP_IMAGE_PREVIEW_SUPPORTED_CAPS:
+      gst_value_set_caps (value, gst_vf_src_pad_get_supported_caps_unlocked
+          (src));
+      break;
+
+    case PROP_FLICKER_MODE:
+      g_value_set_enum (value, src->photo_settings.flicker_mode);
+      break;
+
+    case PROP_COLOR_TEMPERATURE:
+      g_value_set_uint (value, src->photo_settings.color_temperature);
+      break;
+
+    case PROP_WHITE_POINT:
+      g_value_take_boxed (value, g_array_new (FALSE, FALSE, sizeof(guint)));
+      break;
+
+    case PROP_ANALOG_GAIN:
+      g_value_set_float (value, src->photo_settings.analog_gain);
+      break;
+
+    case PROP_EXPOSURE_MODE:
+      g_value_set_enum (value, src->photo_settings.exposure_mode);
+      break;
+
+    case PROP_LENS_FOCUS:
+      g_value_set_enum (value, src->photo_settings.lens_focus);
+      break;
+
+    case PROP_MIN_EXPOSURE_TIME:
+      g_value_set_uint (value, src->photo_settings.min_exposure_time);
+      break;
+
+    case PROP_MAX_EXPOSURE_TIME:
+      g_value_set_uint (value, src->photo_settings.max_exposure_time);
+      break;
+
+    default:
+      ret = FALSE;
+      break;
   }
+  GST_OBJECT_UNLOCK (src);
 
-  // TODO: more
-
-  return FALSE;
+  return ret;
 }
 
 gboolean
 gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
+  gboolean ret = FALSE;
+
+  GST_OBJECT_LOCK (src);
   switch (prop_id) {
     case PROP_FLASH_MODE:
-      _gst_photo_iface_set_flash_mode (src, g_value_get_enum (value), TRUE);
-      return TRUE;
+      ret = gst_photo_iface_set_flash_mode_unlocked (src,
+          g_value_get_enum (value), TRUE);
+      break;
 
     case PROP_FOCUS_MODE:
-      _gst_photo_iface_set_focus_mode (src, g_value_get_enum (value), TRUE);
-      return TRUE;
+      ret = gst_photo_iface_set_focus_mode_unlocked (src,
+          g_value_get_enum (value), TRUE);
+      break;
 
     case PROP_WB_MODE:
-      _gst_photo_iface_set_white_balance_mode (src, g_value_get_enum (value),
-          TRUE);
-      return TRUE;
+      ret = gst_photo_iface_set_white_balance_mode_unlocked (src,
+          g_value_get_enum (value), TRUE);
+      break;
 
     case PROP_ZOOM:
-      _gst_photo_iface_set_zoom (src, g_value_get_float (value), TRUE);
-      return TRUE;
+      ret = gst_photo_iface_set_zoom_unlocked (src, g_value_get_float (value),
+          TRUE);
+      break;
 
     case PROP_ISO_SPEED:
-      _gst_photo_iface_set_iso_speed (src, g_value_get_uint (value), TRUE);
-      return TRUE;
+      ret = gst_photo_iface_set_iso_speed_unlocked (src,
+          g_value_get_uint (value), TRUE);
+      break;
 
     case PROP_EV_COMP:
-      _gst_photo_iface_set_ev_compensation (src, g_value_get_float (value),
-          TRUE);
-      return TRUE;
+      ret = gst_photo_iface_set_ev_compensation_unlocked (src,
+          g_value_get_float (value), TRUE);
+      break;
+
+    case PROP_COLOR_TONE:
+      ret = gst_photo_iface_set_color_tone_mode_unlocked (src,
+          g_value_get_enum (value), TRUE);
+      break;
+
+    case PROP_SCENE_MODE:
+      ret = gst_photo_iface_set_scene_mode_unlocked (src,
+          g_value_get_enum (value), TRUE);
+      break;
+
+    case PROP_FLICKER_MODE:
+      ret = gst_photo_iface_set_flicker_mode_unlocked (src,
+          g_value_get_enum (value), TRUE);
+      break;
+
+    case PROP_EXPOSURE_MODE:
+      ret = gst_photo_iface_set_exposure_mode_unlocked (src,
+          g_value_get_enum (value), TRUE);
+      break;
   }
+  GST_OBJECT_UNLOCK (src);
 
-  // TODO: more
-
-  return FALSE;
+  return ret;
 }
 
 static gboolean
-gst_photo_iface_get_flash_mode (GstPhotography * photo, GstPhotographyFlashMode * flash)
+gst_photo_iface_get_flash_mode (GstPhotography * photo,
+    GstPhotographyFlashMode * flash)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
-  GST_DEBUG_OBJECT (src, "get flash mode");
-
-  *flash = _gst_photo_iface_get_flash_mode (src);
+  GST_OBJECT_LOCK (src);
+  *flash = src->photo_settings.flash_mode;
+  GST_OBJECT_UNLOCK (src);
 
   return TRUE;
 }
 
 static gboolean
-gst_photo_iface_set_flash_mode (GstPhotography * photo, GstPhotographyFlashMode flash)
+gst_photo_iface_set_flash_mode (GstPhotography * photo,
+    GstPhotographyFlashMode flash)
 {
-  return _gst_photo_iface_set_flash_mode (GST_DROID_CAM_SRC (photo), flash,
-      TRUE);
+  gboolean ret;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_OBJECT_LOCK (src);
+  ret = gst_photo_iface_set_flash_mode_unlocked (src, flash, TRUE);
+  GST_OBJECT_UNLOCK (src);
+
+  return ret;
 }
 
 void
 gst_photo_iface_update_flash_mode (GstDroidCamSrc * src)
 {
-  _gst_photo_iface_set_flash_mode (src, src->photo_settings.flash_mode, TRUE);
-}
-
-static GstPhotographyFlashMode
-_gst_photo_iface_get_flash_mode (GstDroidCamSrc * src)
-{
-  GstPhotographyFlashMode flash;
-
   GST_OBJECT_LOCK (src);
-
-  flash = src->photo_settings.flash_mode;
-
-  GST_DEBUG_OBJECT (src, "returning flash mode %i", flash);
-
+  gst_photo_iface_set_flash_mode_unlocked (src, src->photo_settings.flash_mode,
+      TRUE);
   GST_OBJECT_UNLOCK (src);
-
-  return flash;
 }
 
 static gboolean
-_gst_photo_iface_set_flash_mode (GstDroidCamSrc * src, GstPhotographyFlashMode flash,
-    gboolean commit)
+gst_photo_iface_set_flash_mode_unlocked (GstDroidCamSrc * src,
+    GstPhotographyFlashMode flash, gboolean commit)
 {
-  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
-
-  const char *val =
-      gst_camera_settings_find_droid (src->settings->flash_mode, flash);
-
-  GST_DEBUG_OBJECT (src, "set flash mode to %i (%s)", flash, val);
-
-  if (!val) {
-    return FALSE;
+  gboolean ret = gst_photo_iface_set_enum_parameter_unlocked (src,
+      src->settings->flash_mode, "flash-mode", flash, commit);
+  if (ret) {
+    src->photo_settings.flash_mode = flash;
   }
-
-  GST_DEBUG_OBJECT (src, "storing flash mode %i", flash);
-
-  GST_OBJECT_LOCK (src);
-  src->photo_settings.flash_mode = flash;
-
-  if (!src->camera_params) {
-    GST_OBJECT_UNLOCK (src);
-    return TRUE;
-  }
-
-  camera_params_set (src->camera_params, "flash-mode", val);
-  GST_OBJECT_UNLOCK (src);
-
-  if (!commit) {
-    return TRUE;
-  }
-
-  return klass->set_camera_params (src);
+  return ret;
 }
 
 static gboolean
-gst_photo_iface_get_focus_mode (GstPhotography * photo, GstPhotographyFocusMode * focus)
+gst_photo_iface_get_focus_mode (GstPhotography * photo,
+    GstPhotographyFocusMode * focus)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
-  GST_DEBUG_OBJECT (src, "get focus mode");
-
-  *focus = _gst_photo_iface_get_focus_mode (src);
+  GST_OBJECT_LOCK (src);
+  *focus = src->photo_settings.focus_mode;
+  GST_OBJECT_UNLOCK (src);
 
   return TRUE;
 }
 
 static gboolean
-gst_photo_iface_set_focus_mode (GstPhotography * photo, GstPhotographyFocusMode focus)
+gst_photo_iface_set_focus_mode (GstPhotography * photo,
+    GstPhotographyFocusMode focus)
 {
-  return _gst_photo_iface_set_focus_mode (GST_DROID_CAM_SRC (photo), focus,
-      TRUE);
-}
-
-static GstPhotographyFocusMode
-_gst_photo_iface_get_focus_mode (GstDroidCamSrc * src)
-{
-  GstPhotographyFocusMode focus;
+  gboolean ret;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
   GST_OBJECT_LOCK (src);
-
-  focus = src->photo_settings.focus_mode;
-
-  GST_DEBUG_OBJECT (src, "returning focus mode %i", focus);
-
+  ret = gst_photo_iface_set_focus_mode_unlocked (src, focus, TRUE);
   GST_OBJECT_UNLOCK (src);
 
-  return focus;
+  return ret;
 }
 
 static gboolean
-_gst_photo_iface_set_focus_mode (GstDroidCamSrc * src,
+gst_photo_iface_set_focus_mode_unlocked (GstDroidCamSrc * src,
     GstPhotographyFocusMode focus, gboolean commit)
 {
-  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+  gboolean ret;
+  GHashTable *table;
 
-  const char *val =
-      gst_camera_settings_find_droid (src->settings->focus_mode, focus);
-
-  GST_DEBUG_OBJECT (src, "set focus mode to %i (%s)", focus, val);
-
-  if (!val) {
-    return FALSE;
-  }
-
-  GST_DEBUG_OBJECT (src, "storing focus mode %i", focus);
-
-  GST_OBJECT_LOCK (src);
-  src->photo_settings.focus_mode = focus;
-
-  if (!src->camera_params) {
-    GST_OBJECT_UNLOCK (src);
-    return TRUE;
-  }
-
-  /* Special handling for this focus mode */
-  if (!strcmp (val, "continuous")) {
-    if (src->mode == MODE_IMAGE) {
-      camera_params_set (src->camera_params, "focus-mode",
-          "continuous-picture");
-    } else {
-      camera_params_set (src->camera_params, "focus-mode", "continuous-video");
-    }
+  if (src->mode == MODE_IMAGE) {
+    table = src->settings->image_focus_mode;
   } else {
-    camera_params_set (src->camera_params, "focus-mode", val);
+    table = src->settings->video_focus_mode;
   }
 
-  GST_OBJECT_UNLOCK (src);
-
-  if (!commit) {
-    return TRUE;
+  ret = gst_photo_iface_set_enum_parameter_unlocked (src, table, "focus-mode",
+      focus, commit);
+  if (ret) {
+    src->photo_settings.focus_mode = focus;
   }
-
-  return klass->set_camera_params (src);
+  return ret;
 }
 
 void
 gst_photo_iface_update_focus_mode (GstDroidCamSrc * src)
 {
-  _gst_photo_iface_set_focus_mode (src, src->photo_settings.focus_mode, TRUE);
+  GST_OBJECT_LOCK (src);
+  gst_photo_iface_set_focus_mode_unlocked (src, src->photo_settings.focus_mode,
+      TRUE);
+  GST_OBJECT_UNLOCK (src);
 }
 
 static gboolean
@@ -433,9 +605,9 @@ gst_photo_iface_get_white_balance_mode (GstPhotography * photo,
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
-  GST_DEBUG_OBJECT (src, "get white balance mode");
-
-  *wb = _gst_photo_iface_get_white_balance_mode (src);
+  GST_OBJECT_LOCK (src);
+  *wb = src->photo_settings.wb_mode;
+  GST_OBJECT_UNLOCK (src);
 
   return TRUE;
 }
@@ -444,59 +616,46 @@ static gboolean
 gst_photo_iface_set_white_balance_mode (GstPhotography * photo,
     GstPhotographyWhiteBalanceMode wb)
 {
-  return _gst_photo_iface_set_white_balance_mode (GST_DROID_CAM_SRC (photo), wb,
-      TRUE);
-}
-
-static GstPhotographyWhiteBalanceMode _gst_photo_iface_get_white_balance_mode
-    (GstDroidCamSrc * src)
-{
-  GstPhotographyWhiteBalanceMode wb;
+  gboolean ret;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
   GST_OBJECT_LOCK (src);
-
-  wb = src->photo_settings.wb_mode;
-
-  GST_DEBUG_OBJECT (src, "returning white balance mode %i", wb);
-
+  ret = gst_photo_iface_set_white_balance_mode_unlocked (src, wb, TRUE);
   GST_OBJECT_UNLOCK (src);
 
-  return wb;
+  return ret;
 }
 
 static gboolean
-_gst_photo_iface_set_white_balance_mode (GstDroidCamSrc * src,
+gst_photo_iface_set_white_balance_mode_unlocked (GstDroidCamSrc * src,
     GstPhotographyWhiteBalanceMode wb, gboolean commit)
 {
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+  gboolean ret;
 
-  const char *val =
-      gst_camera_settings_find_droid (src->settings->white_balance_mode, wb);
-
-  GST_DEBUG_OBJECT (src, "set white balance mode to %i (%s)", wb, val);
-
-  if (!val) {
-    return FALSE;
+  if (wb == GST_PHOTOGRAPHY_WB_MODE_MANUAL) {
+    ret = TRUE;
+    if (src->camera_params) {
+      camera_params_set (src->camera_params, "auto-whitebalance-lock", "true");
+    }
+  } else {
+    ret = gst_photo_iface_set_enum_parameter_unlocked (src,
+      src->settings->white_balance_mode, "whitebalance", wb, FALSE);
+    if (ret && src->camera_params) {
+      camera_params_set (src->camera_params, "auto-whitebalance-lock", "false");
+    }
   }
 
-  GST_DEBUG_OBJECT (src, "storing white balance mode %i", wb);
-
-  GST_OBJECT_LOCK (src);
-  src->photo_settings.wb_mode = wb;
-
-  if (!src->camera_params) {
+  if (ret && commit && src->camera_params) {
     GST_OBJECT_UNLOCK (src);
-    return TRUE;
+    ret = klass->set_camera_params (src);
+    GST_OBJECT_LOCK (src);
   }
 
-  camera_params_set (src->camera_params, "whitebalance", val);
-  GST_OBJECT_UNLOCK (src);
-
-  if (!commit) {
-    return TRUE;
+  if (ret) {
+    src->photo_settings.wb_mode = wb;
   }
-
-  return klass->set_camera_params (src);
+  return ret;
 }
 
 static gboolean
@@ -504,9 +663,9 @@ gst_photo_iface_get_zoom (GstPhotography * photo, gfloat * zoom)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
-  GST_DEBUG_OBJECT (src, "get zoom");
-
-  *zoom = _gst_photo_iface_get_zoom (src);
+  GST_OBJECT_LOCK (src);
+  *zoom = src->photo_settings.zoom;
+  GST_OBJECT_UNLOCK (src);
 
   return TRUE;
 }
@@ -514,53 +673,59 @@ gst_photo_iface_get_zoom (GstPhotography * photo, gfloat * zoom)
 static gboolean
 gst_photo_iface_set_zoom (GstPhotography * photo, gfloat zoom)
 {
-  return _gst_photo_iface_set_zoom (GST_DROID_CAM_SRC (photo), zoom, TRUE);
-}
-
-static gfloat
-_gst_photo_iface_get_zoom (GstDroidCamSrc * src)
-{
-  gfloat zoom;
+  gboolean ret;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
   GST_OBJECT_LOCK (src);
-
-  zoom = src->photo_settings.zoom;
-
-  GST_DEBUG_OBJECT (src, "returning zoom %f", zoom);
-
+  ret = gst_photo_iface_set_zoom_unlocked (src, zoom, TRUE);
   GST_OBJECT_UNLOCK (src);
 
-  return zoom;
+  return ret;
 }
 
 static gboolean
-_gst_photo_iface_set_zoom (GstDroidCamSrc * src, gfloat zoom, gboolean commit)
+gst_photo_iface_set_zoom_unlocked (GstDroidCamSrc * src, gfloat zoom,
+    gboolean commit)
 {
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
-  int droid_val = (zoom * 10) - 10;
-  char *val = g_strdup_printf ("%i", droid_val);
-
-  GST_DEBUG_OBJECT (src, "set zoom to %f (%s)", zoom, val);
-
-  GST_OBJECT_LOCK (src);
-  src->photo_settings.zoom = zoom;
+  gint zoom_ratio = round (zoom * 100);
+  gint index = 0;
+  gint index_difference = INT_MAX;
+  gint i;
+  gboolean ret = TRUE;
 
   if (!src->camera_params) {
+    goto done;
+  }
+
+  if (!src->zoom_ratios) {
+    ret = FALSE;
+    goto done;
+  }
+
+  for (i = 0; i < src->num_zoom_ratios; ++i) {
+    int difference = abs (src->zoom_ratios[i] - zoom_ratio);
+    if (difference >= index_difference) {
+        break;
+    }
+    index = i;
+    index_difference = difference;
+  }
+
+  camera_params_set_int (src->camera_params, "zoom", index);
+
+  if (commit) {
     GST_OBJECT_UNLOCK (src);
-    g_free (val);
-    return TRUE;
+    ret = klass->set_camera_params (src);
+    GST_OBJECT_LOCK (src);
   }
 
-  camera_params_set (src->camera_params, "zoom", val);
-  g_free (val);
-
-  GST_OBJECT_UNLOCK (src);
-
-  if (!commit) {
-    return TRUE;
+done:
+  if (ret) {
+    src->photo_settings.zoom = zoom;
   }
 
-  return klass->set_camera_params (src);
+  return ret;
 }
 
 static gboolean
@@ -568,9 +733,9 @@ gst_photo_iface_get_iso_speed (GstPhotography * photo, guint * iso)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
-  GST_DEBUG_OBJECT (src, "get iso speed");
-
-  *iso = _gst_photo_iface_get_iso_speed (src);
+  GST_OBJECT_LOCK (src);
+  *iso = src->photo_settings.iso_speed;
+  GST_OBJECT_UNLOCK (src);
 
   return TRUE;
 }
@@ -578,58 +743,26 @@ gst_photo_iface_get_iso_speed (GstPhotography * photo, guint * iso)
 static gboolean
 gst_photo_iface_set_iso_speed (GstPhotography * photo, guint iso)
 {
-  return _gst_photo_iface_set_iso_speed (GST_DROID_CAM_SRC (photo), iso, TRUE);
-}
-
-static guint
-_gst_photo_iface_get_iso_speed (GstDroidCamSrc * src)
-{
-  guint iso;
+  gboolean ret;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
   GST_OBJECT_LOCK (src);
-
-  iso = src->photo_settings.iso_speed;
-
-  GST_DEBUG_OBJECT (src, "returning iso speed %i", iso);
-
+  ret = gst_photo_iface_set_iso_speed_unlocked (src, iso, TRUE);
   GST_OBJECT_UNLOCK (src);
 
-  return iso;
+  return ret;
 }
 
 static gboolean
-_gst_photo_iface_set_iso_speed (GstDroidCamSrc * src, guint iso,
+gst_photo_iface_set_iso_speed_unlocked (GstDroidCamSrc * src, guint iso,
     gboolean commit)
 {
-  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
-
-  const char *val =
-      gst_camera_settings_find_droid (src->settings->iso_speed, iso);
-
-  GST_DEBUG_OBJECT (src, "set iso speed to %i (%s)", iso, val);
-
-  if (!val) {
-    return FALSE;
+  gboolean ret = gst_photo_iface_set_enum_parameter_unlocked (src,
+      src->settings->iso_speed, "iso", iso, commit);
+  if (ret) {
+    src->photo_settings.iso_speed = iso;
   }
-
-  GST_DEBUG_OBJECT (src, "storing iso speed %i", iso);
-
-  GST_OBJECT_LOCK (src);
-  src->photo_settings.iso_speed = iso;
-
-  if (!src->camera_params) {
-    GST_OBJECT_UNLOCK (src);
-    return TRUE;
-  }
-
-  camera_params_set (src->camera_params, "iso", val);
-  GST_OBJECT_UNLOCK (src);
-
-  if (!commit) {
-    return TRUE;
-  }
-
-  return klass->set_camera_params (src);
+  return ret;
 }
 
 static gboolean
@@ -637,9 +770,9 @@ gst_photo_iface_get_ev_compensation (GstPhotography * photo, gfloat * ev)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
-  GST_DEBUG_OBJECT (src, "get ev comp");
-
-  *ev = _gst_photo_iface_get_ev_compensation (src);
+  GST_OBJECT_LOCK (src);
+  *ev = src->photo_settings.ev_compensation;
+  GST_OBJECT_UNLOCK (src);
 
   return TRUE;
 }
@@ -647,59 +780,46 @@ gst_photo_iface_get_ev_compensation (GstPhotography * photo, gfloat * ev)
 static gboolean
 gst_photo_iface_set_ev_compensation (GstPhotography * photo, gfloat ev)
 {
-  return _gst_photo_iface_set_ev_compensation (GST_DROID_CAM_SRC (photo), ev,
-      TRUE);
-}
-
-static gfloat
-_gst_photo_iface_get_ev_compensation (GstDroidCamSrc * src)
-{
-  gfloat ev;
+  gboolean ret;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
   GST_OBJECT_LOCK (src);
-
-  ev = src->photo_settings.ev_compensation;
-
-  GST_DEBUG_OBJECT (src, "returning ev compensation %f", ev);
-
+  ret = gst_photo_iface_set_ev_compensation_unlocked (src, ev, TRUE);
   GST_OBJECT_UNLOCK (src);
 
-  return ev;
+  return ret;
 }
 
 static gboolean
-_gst_photo_iface_set_ev_compensation (GstDroidCamSrc * src, gfloat ev,
+gst_photo_iface_set_ev_compensation_unlocked (GstDroidCamSrc * src, gfloat ev,
     gboolean commit)
 {
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
-  int val = src->ev_comp_step * ev;
-  gchar *string_val = NULL;
+  gboolean ret = TRUE;
+  gint compensation = round (ev / src->ev_comp_step);
 
-  GST_DEBUG_OBJECT (src, "set ev comp to to %f (%d)", ev, val);
-
-  string_val = g_strdup_printf ("%i", val);
-
-  GST_OBJECT_LOCK (src);
-  src->photo_settings.ev_compensation = ev;
+  GST_DEBUG_OBJECT (src, "set exposure-compensation to %f (%i)", ev,
+      compensation);
 
   if (!src->camera_params) {
+    goto done;
+  }
+
+  camera_params_set_int (src->camera_params, "exposure-compensation",
+      round (ev / src->ev_comp_step));
+
+  if (commit) {
     GST_OBJECT_UNLOCK (src);
-
-    g_free (string_val);
-
-    return TRUE;
+    ret = klass->set_camera_params (src);;
+    GST_OBJECT_LOCK (src);
   }
 
-  camera_params_set (src->camera_params, "exposure-compensation", string_val);
-  g_free (string_val);
-
-  GST_OBJECT_UNLOCK (src);
-
-  if (!commit) {
-    return TRUE;
+done:
+  if (ret) {
+    src->photo_settings.ev_compensation = ev;
   }
 
-  return klass->set_camera_params (src);
+  return ret;
 }
 
 static void
@@ -722,7 +842,7 @@ gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on)
     default:
       GST_WARNING_OBJECT (src,
           "Autofocus is not allowed with focus mode %d (%s)", mode,
-          gst_camera_settings_find_droid (src->settings->focus_mode, mode));
+          gst_camera_settings_find_droid (src->settings->image_focus_mode, mode));
       break;
   }
 
@@ -733,4 +853,245 @@ gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on)
     GST_DEBUG_OBJECT (src, "stopping autofocus");
     gst_droid_cam_src_stop_autofocus (src);
   }
+}
+
+/* Color tone mode */
+static gboolean
+gst_photo_iface_get_color_tone_mode (GstPhotography * photo,
+    GstPhotographyColorToneMode * mode)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_OBJECT_LOCK (src);
+  *mode = src->photo_settings.tone_mode;
+  GST_OBJECT_UNLOCK (src);
+
+  return TRUE;
+}
+
+static gboolean
+gst_photo_iface_set_color_tone_mode (GstPhotography * photo,
+    GstPhotographyColorToneMode mode)
+{
+  gboolean ret;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_OBJECT_LOCK (src);
+  ret = gst_photo_iface_set_color_tone_mode_unlocked (src, mode, TRUE);
+  GST_OBJECT_UNLOCK (src);
+
+  return ret;
+}
+
+static gboolean
+gst_photo_iface_set_color_tone_mode_unlocked (GstDroidCamSrc *src,
+    GstPhotographyColorToneMode mode, gboolean commit)
+{
+  gboolean ret = gst_photo_iface_set_enum_parameter_unlocked (src,
+      src->settings->tone_mode, "effect", mode, commit);
+  if (ret) {
+    src->photo_settings.tone_mode = mode;
+  }
+  return ret;
+}
+
+/* Scene mode */
+static gboolean
+gst_photo_iface_get_scene_mode (GstPhotography * photo,
+    GstPhotographySceneMode * mode)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_OBJECT_LOCK (src);
+  *mode = src->photo_settings.scene_mode;
+  GST_OBJECT_UNLOCK (src);
+
+  return TRUE;
+}
+
+static gboolean
+gst_photo_iface_set_scene_mode (GstPhotography * photo,
+    GstPhotographySceneMode mode)
+{
+  gboolean ret;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_OBJECT_LOCK (src);
+  ret =  gst_photo_iface_set_scene_mode_unlocked (src, mode, TRUE);
+  GST_OBJECT_UNLOCK (src);
+
+  return ret;
+}
+
+static gboolean
+gst_photo_iface_set_scene_mode_unlocked (GstDroidCamSrc * src,
+    GstPhotographySceneMode mode, gboolean commit)
+{
+  if (gst_photo_iface_set_enum_parameter_unlocked (src,
+      src->settings->scene_mode, "scene-mode", mode, commit)) {
+    src->photo_settings.scene_mode = mode;
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/* Flicker reduction mode */
+static gboolean
+gst_photo_iface_get_flicker_mode (GstPhotography * photo,
+    GstPhotographyFlickerReductionMode * mode)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_OBJECT_LOCK (src);
+  *mode = src->photo_settings.flicker_mode;
+  GST_OBJECT_UNLOCK (src);
+
+  return TRUE;
+}
+
+static gboolean
+gst_photo_iface_set_flicker_mode (GstPhotography * photo,
+    GstPhotographyFlickerReductionMode mode)
+{
+  gboolean ret;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_OBJECT_LOCK (src);
+  ret = gst_photo_iface_set_flicker_mode_unlocked (src, mode, TRUE);
+  GST_OBJECT_UNLOCK (src);
+
+  return ret;
+}
+
+static gboolean
+gst_photo_iface_set_flicker_mode_unlocked (GstDroidCamSrc * src,
+    GstPhotographyFlickerReductionMode mode, gboolean commit)
+{
+  gboolean ret = gst_photo_iface_set_enum_parameter_unlocked (src,
+      src->settings->flicker_mode, "antibanding", mode, commit);
+  if (ret) {
+    src->photo_settings.flicker_mode = mode;
+  }
+  return ret;
+}
+
+/* Auto exposure */
+static gboolean gst_photo_iface_set_exposure_mode_unlocked (GstDroidCamSrc * src,
+    GstPhotographyExposureMode mode, gboolean commit)
+{
+  gboolean ret = gst_photo_iface_set_enum_parameter_unlocked (src,
+      src->settings->exposure_mode, "auto-exposure-lock", mode, commit);
+  if (ret) {
+    src->photo_settings.exposure_mode = mode;
+  }
+  return ret;
+}
+
+/* Capabilities */
+static GstPhotographyCaps
+gst_photo_iface_get_capabilities (GstPhotography * photo)
+{
+  GstPhotographyCaps caps;
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_OBJECT_LOCK (src);
+  caps = gst_photo_iface_get_capabilities_unlocked (src);
+  GST_OBJECT_UNLOCK (src);
+
+  return caps;
+}
+
+static  GstPhotographyCaps
+gst_photo_iface_get_capabilities_unlocked (GstDroidCamSrc *src)
+{
+  guint caps = 0;
+  const gchar *value;
+
+  if (!src->camera_params) {
+    return caps;
+  }
+
+  value = camera_params_get (src->camera_params, "exposure-step");
+  if (value) {
+    caps |= GST_PHOTOGRAPHY_CAPS_EV_COMP;
+  }
+
+  value = camera_params_get (src->camera_params, "iso-values");
+  if (value && strcmp (value, "auto") != 0) {
+    caps |= GST_PHOTOGRAPHY_CAPS_ISO_SPEED;
+  }
+
+  value = camera_params_get (src->camera_params, "whitebalance-values");
+  if (value && strcmp (value, "auto") != 0) {
+    caps |= GST_PHOTOGRAPHY_CAPS_WB_MODE;
+  }
+
+  value = camera_params_get (src->camera_params, "effect-values");
+  if (value && strcmp (value, "none") != 0) {
+    caps |= GST_PHOTOGRAPHY_CAPS_TONE;
+  }
+
+  value = camera_params_get (src->camera_params, "scene-mode-values");
+  if (value && strcmp (value, "auto") != 0) {
+    caps |= GST_PHOTOGRAPHY_CAPS_SCENE;
+  }
+
+  value = camera_params_get (src->camera_params, "flash-mode-values");
+  if (value && strcmp (value, "off") != 0) {
+    caps |= GST_PHOTOGRAPHY_CAPS_FLASH;
+  }
+
+  value = camera_params_get (src->camera_params, "zoom-supported");
+  if (strcmp (value, "true") == 0) {
+    caps |= GST_PHOTOGRAPHY_CAPS_ZOOM;
+  }
+
+  value = camera_params_get (src->camera_params, "focus-mode-values");
+  if (value && strcmp (value, "infinity") != 0) {
+    caps |= GST_PHOTOGRAPHY_CAPS_FOCUS;
+  }
+
+  value = camera_params_get (src->camera_params, "antibanding-values");
+  if (value && strcmp (value, "auto") != 0) {
+    caps |= GST_PHOTOGRAPHY_CAPS_FLICKER_REDUCTION;
+  }
+
+  return caps;
+}
+
+static gboolean
+gst_photo_iface_get_config (GstPhotography * photo,
+    GstPhotographySettings * config)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+
+  GST_OBJECT_LOCK (src);
+  *config = src->photo_settings;
+  GST_OBJECT_UNLOCK (src);
+
+  return TRUE;
+}
+
+static gboolean
+gst_photo_iface_set_config (GstPhotography * photo,
+    GstPhotographySettings * config)
+{
+  GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
+  GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
+
+  gboolean ret;
+
+  GST_OBJECT_LOCK (src);
+
+  gst_photo_iface_settings_to_params (src, config);
+
+  if (src->camera_params) {
+    ret = klass->set_camera_params (src);
+  } else {
+    ret = TRUE;
+  }
+
+  GST_OBJECT_UNLOCK (src);
+
+  return ret;
 }

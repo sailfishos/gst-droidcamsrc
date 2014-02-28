@@ -129,6 +129,7 @@ static void gst_droid_cam_src_handle_compressed_image (GstDroidCamSrc * src,
 
 static gboolean gst_droid_cam_src_finish_capture (GstDroidCamSrc * src);
 static void gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src);
+static void gst_droid_cam_src_update_zoom_ratios (GstDroidCamSrc * src);
 
 static void gst_droid_cam_src_set_recording_hint (GstDroidCamSrc * src,
     gboolean apply);
@@ -276,10 +277,10 @@ gst_droid_cam_src_init (GstDroidCamSrc * src)
   src->events = NULL;
   src->settings = gst_camera_settings_new ();
   src->image_noise_reduction = DEFAULT_IMAGE_NOISE_REDUCTION;
+  src->zoom_ratios = NULL;
+  src->num_zoom_ratios = 0;
   src->max_zoom = DEFAULT_MAX_ZOOM;
   src->video_torch = DEFAULT_VIDEO_TORCH;
-  src->min_ev_comp = 0;
-  src->max_ev_comp = 0;
   src->ev_comp_step = 0.0;
 
   src->capturing = FALSE;
@@ -472,6 +473,9 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   g_mutex_lock (&src->params_lock);
   params = src->dev->ops->get_parameters (src->dev);
   src->camera_params = camera_params_from_string (params);
+
+  GST_LOG_OBJECT (src, "initial parameters %s", params);
+
   if (src->dev->ops->put_parameters) {
     src->dev->ops->put_parameters (src->dev, params);
   } else {
@@ -479,8 +483,9 @@ gst_droid_cam_src_setup_pipeline (GstDroidCamSrc * src)
   }
   g_mutex_unlock (&src->params_lock);
 
+  gst_droid_cam_src_update_zoom_ratios (src);
   gst_photo_iface_init_ev_comp (src);
-  gst_photo_iface_settings_to_params (src);
+  gst_photo_iface_settings_to_params (src, &src->photo_settings);
   gst_droid_cam_src_set_recording_hint (src, TRUE);
 
   /* TODO: If we end up with a device with 1 camera then this will break. */
@@ -583,8 +588,14 @@ gst_droid_cam_src_tear_down_pipeline (GstDroidCamSrc * src)
   }
 
   if (src->camera_params) {
-    camera_params_free (src->camera_params);
+    gst_structure_free (src->camera_params);
     src->camera_params = NULL;
+  }
+
+  if (src->zoom_ratios) {
+    g_free (src->zoom_ratios);
+    src->zoom_ratios = NULL;
+    src->num_zoom_ratios = 0;
   }
 
   src->hwmod = NULL;
@@ -1539,17 +1550,60 @@ gst_droid_cam_src_apply_image_noise_reduction (GstDroidCamSrc * src)
 }
 
 static void
+gst_droid_cam_src_increment_zoom_ratios (const gchar *value, gpointer data)
+{
+  gint *num_zoom_ratios = data;
+
+  ++(*num_zoom_ratios);
+}
+
+static void
+gst_droid_cam_src_set_zoom_ratio (const gchar *value, gpointer data)
+{
+  gint **ratios = data;
+
+  (**ratios) = atoi (value);
+  ++(*ratios);
+}
+
+static void
+gst_droid_cam_src_update_zoom_ratios (GstDroidCamSrc * src)
+{
+  gint num_zoom_ratios = 0;
+  gint *zoom_ratios;
+
+  if (src->zoom_ratios) {
+    g_free (src->zoom_ratios);
+    src->zoom_ratios = NULL;
+    src->num_zoom_ratios = 0;
+  }
+
+  if (!camera_params_foreach (src->camera_params, "zoom-ratios",
+      gst_droid_cam_src_increment_zoom_ratios, &num_zoom_ratios)
+      || num_zoom_ratios == 0) {
+    return;
+  }
+
+  src->num_zoom_ratios = num_zoom_ratios;
+  src->zoom_ratios = g_malloc0 (sizeof (gint) * num_zoom_ratios);
+
+  zoom_ratios = src->zoom_ratios;
+
+  camera_params_foreach (src->camera_params, "zoom-ratios",
+      gst_droid_cam_src_set_zoom_ratio, &zoom_ratios);
+
+  GST_DEBUG_OBJECT (src, "number of zoom ratios: %i", src->num_zoom_ratios);
+}
+
+static void
 gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src)
 {
   gchar *params;
-  struct camera_params *camera_params;
+  GstStructure *camera_params;
   int max_zoom;
   GParamSpec *pspec;
   GParamSpecFloat *pspec_f;
   gboolean zoom_changed = FALSE;
-
-  /* It's really bad how we get the value of max-zoom but at least it works. */
-  GST_DEBUG_OBJECT (src, "update max zoom");
 
   if (!src->dev) {
     GST_DEBUG_OBJECT (src, "camera not open");
@@ -1567,27 +1621,26 @@ gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src)
   }
   g_mutex_unlock (&src->params_lock);
 
-  /* 0  -> 1.0
-   * 1  -> 1.1
-   * 2  -> 1.2
-   * 10 -> 2.0
-   * 60 -> 7.0
-   */
   max_zoom = camera_params_get_int (camera_params, "max-zoom");
-  if (max_zoom + 10 != (int) (src->max_zoom * 10)) {
-    GST_DEBUG_OBJECT (src, "setting max_zoom to %f", src->max_zoom);
-    src->max_zoom = (max_zoom + 10) / 10.0;
 
-    g_object_notify (G_OBJECT (src), "max-zoom");
+  GST_DEBUG_OBJECT (src, "update max zoom %d %d", max_zoom, src->num_zoom_ratios);
+
+  if (max_zoom >= 0 && max_zoom < src->num_zoom_ratios
+      && src->max_zoom != src->zoom_ratios[max_zoom] / 100.0f) {
+    src->max_zoom = src->zoom_ratios[max_zoom] / 100.0f;
+
+    GST_DEBUG_OBJECT (src, "setting max_zoom to %f", src->max_zoom);
 
     zoom_changed = TRUE;
   }
 
-  camera_params_free (camera_params);
+  gst_structure_free (camera_params);
 
   if (!zoom_changed) {
     return;
   }
+
+  g_object_notify (G_OBJECT (src), "max-zoom");
 
   /* update gobject param spec */
   pspec =

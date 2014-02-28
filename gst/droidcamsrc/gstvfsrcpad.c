@@ -162,19 +162,15 @@ gst_vf_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
 }
 
 GstCaps *
-gst_vf_src_pad_get_supported_caps (GstDroidCamSrc *src)
+gst_vf_src_pad_get_supported_caps_unlocked (GstDroidCamSrc *src)
 {
   GstCaps *caps;
-
-  GST_OBJECT_LOCK (src);
 
   if (src->camera_params) {
     caps = camera_params_get_viewfinder_caps (src->camera_params);
   } else {
     caps = gst_caps_copy (gst_pad_get_pad_template_caps (src->vfsrc));
   }
-
-  GST_OBJECT_UNLOCK (src);
 
   return caps;
 }
@@ -253,7 +249,11 @@ gst_droid_cam_src_vfsrc_query (GstPad * pad, GstObject * parent,
 
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_CAPS: {
-      GstCaps *caps = gst_vf_src_pad_get_supported_caps (src);
+      GstCaps *caps;
+
+      GST_OBJECT_LOCK (src);
+      caps = gst_vf_src_pad_get_supported_caps_unlocked (src);
+      GST_OBJECT_UNLOCK (src);
 
       GST_LOG_OBJECT (src, "queried caps %" GST_PTR_FORMAT, caps);
 
@@ -327,11 +327,12 @@ gst_droid_cam_src_vfsrc_negotiate (GstDroidCamSrc * src)
   ret = gst_video_info_from_caps (&info, caps);
   if (ret) {
     GST_OBJECT_LOCK (src);
-    camera_params_set_viewfinder_size (src->camera_params, info.width,
-        info.height);
-    camera_params_set_viewfinder_fps (src->camera_params,
+    camera_params_set_resolution (src->camera_params, "preview-size",
+        info.width, info.height);
+    camera_params_set_int (src->camera_params, "preview-frame-rate",
         info.fps_n / info.fps_d);
-    camera_params_set_viewfinder_format (src->camera_params, info.finfo->name);
+    camera_params_set_format (src->camera_params, "preview-format",
+        info.finfo->name);
     GST_OBJECT_UNLOCK (src);
 
     GST_PAD_STREAM_LOCK (src->vfsrc);

@@ -3,7 +3,7 @@ plugin_LTLIBRARIES = libgstdroidcamsrc.la
 libgstdroidcamsrc_la_SOURCES =  plugin.c \
 				gstdroidcamsrc.c \
 				gstcameramemory.c \
-				cameraparams.cc \
+                                cameraparams.c \
 				enums.c \
 				gstvfsrcpad.c \
 				gstimgsrcpad.c \
@@ -15,9 +15,6 @@ libgstdroidcamsrc_la_SOURCES =  plugin.c \
 libgstdroidcamsrc_la_CFLAGS = $(GST_CFLAGS) \
                               $(DROID_CFLAGS) \
                               $(EXIF_CFLAGS)
-
-libgstdroidcamsrc_la_CXXFLAGS = $(GST_CFLAGS) \
-                                $(DROID_CFLAGS)
 
 libgstdroidcamsrc_la_LIBADD = $(GST_LIBS) \
                               $(EXIF_LIBS) \

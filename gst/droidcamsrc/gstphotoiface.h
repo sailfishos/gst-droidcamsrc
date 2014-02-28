@@ -32,8 +32,8 @@ enum
   PROP_MODE,
   PROP_READY_FOR_CAPTURE,
   PROP_SENSOR_MOUNT_ANGLE,
-  PROP_IMAGE_NOISE_REDUCTION,
   PROP_MAX_ZOOM,
+  PROP_IMAGE_NOISE_REDUCTION,
   PROP_VIDEO_TORCH,
 
   /* photography */
@@ -43,6 +43,22 @@ enum
   PROP_ZOOM,
   PROP_ISO_SPEED,
   PROP_EV_COMP,
+  PROP_COLOR_TONE,
+  PROP_SCENE_MODE,
+  PROP_NOISE_REDUCTION,
+  PROP_CAPABILITIES,
+  PROP_APERTURE,
+  PROP_EXPOSURE,
+  PROP_IMAGE_CAPTURE_SUPPORTED_CAPS,
+  PROP_IMAGE_PREVIEW_SUPPORTED_CAPS,
+  PROP_FLICKER_MODE,
+  PROP_COLOR_TEMPERATURE,
+  PROP_WHITE_POINT,
+  PROP_ANALOG_GAIN,
+  PROP_EXPOSURE_MODE,
+  PROP_LENS_FOCUS,
+  PROP_MIN_EXPOSURE_TIME,
+  PROP_MAX_EXPOSURE_TIME,
 
   /* end */
   N_PROPS,
@@ -51,7 +67,8 @@ enum
 void gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface);
 void gst_photo_iface_add_properties (GObjectClass * gobject_class);
 void gst_photo_iface_init_settings (GstDroidCamSrc * src);
-void gst_photo_iface_settings_to_params (GstDroidCamSrc * src);
+void gst_photo_iface_settings_to_params (GstDroidCamSrc * src,
+    GstPhotographySettings * settings);
 void gst_photo_iface_init_ev_comp (GstDroidCamSrc * src);
 
 gboolean gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,

@@ -52,19 +52,15 @@ gst_img_src_pad_new (GstStaticPadTemplate * pad_template, const char *name)
 }
 
 GstCaps *
-gst_img_src_pad_get_supported_caps (GstDroidCamSrc *src)
+gst_img_src_pad_get_supported_caps_unlocked (GstDroidCamSrc *src)
 {
   GstCaps *caps;
-
-  GST_OBJECT_LOCK (src);
 
   if (src->camera_params) {
     caps = camera_params_get_capture_caps (src->camera_params);
   } else {
     caps = gst_caps_copy (gst_pad_get_pad_template_caps (src->imgsrc));
   }
-
-  GST_OBJECT_UNLOCK (src);
 
   return caps;
 }
@@ -129,7 +125,11 @@ gst_droid_cam_src_imgsrc_query (GstPad * pad, GstObject * parent,
 
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_CAPS: {
-      GstCaps *caps = gst_img_src_pad_get_supported_caps (src);
+      GstCaps *caps;
+
+      GST_OBJECT_LOCK (src);
+      caps = gst_img_src_pad_get_supported_caps_unlocked (src);
+      GST_OBJECT_UNLOCK (src);
 
       GST_LOG_OBJECT (src, "queried caps %" GST_PTR_FORMAT, caps);
 
@@ -206,8 +206,8 @@ gst_img_src_pad_renegotiate (GstPad * pad)
 
   if (ret) {
     GST_OBJECT_LOCK (src);
-    camera_params_set_capture_size (src->camera_params, info.width,
-        info.height);
+    camera_params_set_resolution (src->camera_params, "picture-size",
+        info.width, info.height);
     GST_OBJECT_UNLOCK (src);
 
     ret = gst_pad_push_event (src->imgsrc, gst_event_new_caps (caps));

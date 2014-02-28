@@ -26,7 +26,7 @@
 G_BEGIN_DECLS
 
 GstPad *gst_vf_src_pad_new (GstStaticPadTemplate *pad_template, const char * name);
-GstCaps *gst_vf_src_pad_get_supported_caps (GstDroidCamSrc *src);
+GstCaps *gst_vf_src_pad_get_supported_caps_unlocked (GstDroidCamSrc *src);
 void gst_vf_src_pad_init_window (preview_stream_ops_t * window);
 
 G_END_DECLS

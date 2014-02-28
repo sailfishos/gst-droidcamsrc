@@ -50,10 +50,15 @@ gst_camera_settings_new ()
   }
 
   settings->flash_mode = gst_camera_settings_load (file, "flash-mode");
-  settings->focus_mode = gst_camera_settings_load (file, "focus-mode");
+  settings->image_focus_mode = gst_camera_settings_load (file, "image-focus-mode");
+  settings->video_focus_mode = gst_camera_settings_load (file, "video-focus-mode");
   settings->white_balance_mode =
       gst_camera_settings_load (file, "white-balance-mode");
   settings->iso_speed = gst_camera_settings_load (file, "iso-speed");
+  settings->tone_mode = gst_camera_settings_load (file, "tone-mode");
+  settings->scene_mode = gst_camera_settings_load (file, "scene-mode");
+  settings->flicker_mode = gst_camera_settings_load (file, "flicker-mode");
+  settings->exposure_mode = gst_camera_settings_load (file, "exposure-mode");
 
 out:
   if (file) {
@@ -75,9 +80,14 @@ gst_camera_settings_destroy (GstCameraSettings * settings)
     settings->flash_mode = NULL;
   }
 
-  if (settings->focus_mode) {
-    g_hash_table_destroy (settings->focus_mode);
-    settings->focus_mode = NULL;
+  if (settings->image_focus_mode) {
+    g_hash_table_destroy (settings->image_focus_mode);
+    settings->image_focus_mode = NULL;
+  }
+
+  if (settings->video_focus_mode) {
+    g_hash_table_destroy (settings->video_focus_mode);
+    settings->video_focus_mode = NULL;
   }
 
   if (settings->white_balance_mode) {
@@ -88,6 +98,27 @@ gst_camera_settings_destroy (GstCameraSettings * settings)
   if (settings->iso_speed) {
     g_hash_table_destroy (settings->iso_speed);
     settings->iso_speed = NULL;
+  }
+
+  if (settings->tone_mode) {
+    g_hash_table_destroy (settings->tone_mode);
+    settings->tone_mode = NULL;
+  }
+
+
+  if (settings->scene_mode) {
+    g_hash_table_destroy (settings->scene_mode);
+    settings->scene_mode = NULL;
+  }
+
+  if (settings->flicker_mode) {
+    g_hash_table_destroy (settings->flicker_mode);
+    settings->flicker_mode = NULL;
+  }
+
+  if (settings->exposure_mode) {
+    g_hash_table_destroy (settings->exposure_mode);
+    settings->exposure_mode = NULL;
   }
 
   g_free (settings);
