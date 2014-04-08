@@ -20,16 +20,17 @@
 #ifndef __GST_CAMERA_MEMORY_H__
 #define __GST_CAMERA_MEMORY_H__
 
-#include <glib.h>
-#include <hardware/camera.h>
+#include "gstdroidcamsrc.h"
 
 G_BEGIN_DECLS
 
 camera_memory_t *gst_camera_memory_get (int fd, size_t buf_size,
     unsigned int num_bufs, void *data);
 
-void *gst_camera_memory_get_data (const camera_memory_t *data,
-    int index, int * size);
+GstMemory *gst_camera_memory_new (const camera_memory_t *camera_memory,
+    unsigned int index);
+GstMemory *gst_camera_memory_new_video (const camera_memory_t *camera_memory,
+    unsigned int index, GstDroidCamSrc *src);
 
 G_END_DECLS
 

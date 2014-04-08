@@ -32,6 +32,6 @@ plugin_init (GstPlugin * plugin)
       gst_droid_cam_src_get_type ());
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR, GST_VERSION_MINOR, "droidcamsrc",
+GST_PLUGIN_DEFINE (GST_VERSION_MAJOR, GST_VERSION_MINOR, droidcamsrc,
     "Android camera source", plugin_init, VERSION, "LGPL", PACKAGE_NAME,
     "http://jollamobile.com/")

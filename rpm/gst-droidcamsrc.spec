@@ -1,4 +1,4 @@
-Name:           gstreamer0.10-droidcamsrc
+Name:           gstreamer1.0-droidcamsrc
 Summary:        GStreamer source for Android camera hal
 Version:        0.0.0
 Release:        1
@@ -6,14 +6,14 @@ Group:          Applications/Multimedia
 License:        LGPL v2.1+
 URL:            http://jollamobile.com/
 Source0:        %{name}-%{version}.tar.gz
-BuildRequires:  pkgconfig(gstreamer-0.10)
-BuildRequires:  pkgconfig(gstreamer-plugins-base-0.10)
-BuildRequires:  pkgconfig(gstreamer-video-0.10)
-BuildRequires:  pkgconfig(gstreamer-plugins-bad-free-0.10)
-BuildRequires:  pkgconfig(gstreamer-pbutils-0.10)
-BuildRequires:  pkgconfig(gstreamer-tag-0.10)
+BuildRequires:  pkgconfig(gstreamer-1.0)
+BuildRequires:  pkgconfig(gstreamer-plugins-base-1.0)
+BuildRequires:  pkgconfig(gstreamer-video-1.0)
+BuildRequires:  pkgconfig(gstreamer-plugins-bad-1.0)
+BuildRequires:  pkgconfig(gstreamer-pbutils-1.0)
+BuildRequires:  pkgconfig(gstreamer-tag-1.0)
 BuildRequires:  pkgconfig(libhardware)
-BuildRequires:  pkgconfig(libgstnativebuffer)
+BuildRequires:  pkgconfig(libgstanativewindowbuffer-1.0)
 BuildRequires:  pkgconfig(libexif)
 
 %description
@@ -33,5 +33,5 @@ make
 
 %files
 %defattr(-,root,root,-)
-%{_libdir}/gstreamer-0.10/libgstdroidcamsrc.so
+%{_libdir}/gstreamer-1.0/libgstdroidcamsrc.so
 %{_sysconfdir}/xdg/*.conf

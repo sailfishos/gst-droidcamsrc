@@ -31,6 +31,7 @@ gst_droid_cam_src_get_exif_tags (GstBuffer * input)
   ExifData *exif = NULL;
   GstBuffer *buffer = NULL;
   GstTagList *tags = NULL;
+  GstMapInfo map_info;
 
   mem = exif_mem_new_default ();
   if (!mem) {
@@ -43,7 +44,14 @@ gst_droid_cam_src_get_exif_tags (GstBuffer * input)
   }
 
   exif_data_set_data_type (exif, EXIF_DATA_TYPE_COMPRESSED);
-  exif_data_load_data (exif, GST_BUFFER_DATA (input), GST_BUFFER_SIZE (input));
+
+  if (!gst_buffer_map (input, &map_info, GST_MAP_READ)) {
+    goto cleanup;
+  }
+
+  exif_data_load_data (exif, map_info.data, map_info.size);
+
+  gst_buffer_unmap (input, &map_info);
 
   exif_data_save_data (exif, &data, &len);
   if (len < 6) {
@@ -54,10 +62,8 @@ gst_droid_cam_src_get_exif_tags (GstBuffer * input)
   raw_data = data;
   raw_data += 6;
 
-  buffer = gst_buffer_new ();
-  GST_BUFFER_DATA (buffer) = raw_data;
-  GST_BUFFER_SIZE (buffer) = len;
-  GST_BUFFER_MALLOCDATA (buffer) = NULL;
+  buffer = gst_buffer_new_wrapped_full (GST_MAP_READ, raw_data, len, 0, len,
+      NULL, NULL);
 
   tags = gst_tag_list_from_exif_buffer_with_tiff_header (buffer);
 

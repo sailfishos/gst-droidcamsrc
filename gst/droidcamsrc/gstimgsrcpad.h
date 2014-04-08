@@ -21,10 +21,12 @@
 #define __GST_IMG_SRC_PAD_H__
 
 #include <gst/gst.h>
+#include "gstdroidcamsrc.h"
 
 G_BEGIN_DECLS
 
 GstPad *gst_img_src_pad_new (GstStaticPadTemplate *pad_template, const char * name);
+GstCaps *gst_img_src_pad_get_supported_caps (GstDroidCamSrc *src);
 gboolean gst_img_src_pad_renegotiate (GstPad * pad);
 
 G_END_DECLS

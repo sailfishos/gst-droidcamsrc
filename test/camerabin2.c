@@ -242,9 +242,11 @@ main (int argc, char *argv[])
 
   test->src = gst_element_factory_make ("droidcamsrc", NULL);
   test->sink = gst_element_factory_make ("fakesink", NULL);
-  test->bin = gst_element_factory_make ("camerabin2", NULL);
+  test->bin = gst_element_factory_make ("camerabin", NULL);
 
-  assert (test->src && test->sink && test->bin);
+  assert (test->src);
+  assert (test->sink);
+  assert (test->bin);
 
   GstEncodingProfile *video = video_profile ();
   assert (video);

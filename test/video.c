@@ -19,8 +19,8 @@
 
 #include "test.h"
 
-static gboolean
-vidsrc_data_probe (GstPad * pad, GstMiniObject * obj, gpointer user_data)
+static GstPadProbeReturn
+vidsrc_data_probe (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
 {
   GstElement *elem = (GstElement *) user_data;
 
@@ -28,7 +28,7 @@ vidsrc_data_probe (GstPad * pad, GstMiniObject * obj, gpointer user_data)
 
   gst_element_set_state (elem, GST_STATE_PLAYING);
 
-  return TRUE;                  /* keep data. */
+  return GST_PAD_PROBE_OK;                  /* keep data. */
 }
 
 static gboolean
@@ -73,7 +73,8 @@ main (int argc, char *argv[])
   }
 
   GstPad *pad = gst_element_get_static_pad (pipeline->src, "vidsrc");
-  gst_pad_add_data_probe (pad, G_CALLBACK (vidsrc_data_probe), filesink);
+  gst_pad_add_probe (pad, GST_PAD_PROBE_TYPE_DATA_BOTH,
+      vidsrc_data_probe, filesink, NULL);
   gst_object_unref (pad);
 
   g_timeout_add (5000, start_video_capture, pipeline);

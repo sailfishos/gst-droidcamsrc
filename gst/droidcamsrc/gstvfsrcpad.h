@@ -21,11 +21,13 @@
 #define __GST_VF_SRC_PAD_H__
 
 #include <gst/gst.h>
+#include "gstdroidcamsrc.h"
 
 G_BEGIN_DECLS
 
 GstPad *gst_vf_src_pad_new (GstStaticPadTemplate *pad_template, const char * name);
-gboolean gst_vf_src_pad_start_task (GstPad * pad);
+GstCaps *gst_vf_src_pad_get_supported_caps (GstDroidCamSrc *src);
+void gst_vf_src_pad_init_window (preview_stream_ops_t * window);
 
 G_END_DECLS
 

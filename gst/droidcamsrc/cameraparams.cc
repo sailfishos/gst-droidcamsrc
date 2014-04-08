@@ -34,6 +34,45 @@ struct camera_params
   std::map < std::string, std::vector < std::string > >items;
 };
 
+struct ColorFormat
+{
+  const gchar *param_format;
+  const gchar *gstreamer_format;
+};
+
+static const ColorFormat color_format_lookup[] = {
+  { "yuv422sp", "NV16" },
+  { "yuv420sp", "NV12" },
+  { "yuv422i-yuyv", "YUY2" },
+  { "yuv420p", "YV12" },
+  { "nv12", "NV12" },
+  { NULL, NULL }
+};
+
+static const gchar *camera_params_get_gstreamer_format(const gchar *param_format)
+{
+  const ColorFormat *format;
+
+  for (format = color_format_lookup; format->param_format; ++format) {
+      if (strcmp (param_format, format->param_format) == 0)
+        return format->gstreamer_format;
+  }
+
+  return NULL;
+}
+
+static const gchar *camera_params_get_param_format(const gchar *gstreamer_format)
+{
+  const ColorFormat *format;
+
+  for (format = color_format_lookup; format->param_format; ++format) {
+      if (strcmp (gstreamer_format, format->gstreamer_format) == 0)
+        return format->param_format;
+  }
+
+  return NULL;
+}
+
 static bool
 camera_params_get_fps_list (struct camera_params *params, GValue& output)
 {
@@ -60,6 +99,55 @@ camera_params_get_fps_list (struct camera_params *params, GValue& output)
   }
 
   return true;
+}
+
+static bool
+camera_params_get_format_list (struct camera_params *params, GValue& output)
+{
+  std::map < std::string, std::vector < std::string > >::iterator format_iter =
+    params->items.find ("video-frame-format");
+  bool ret = false;
+
+  if (format_iter == params->items.end()) {
+    return false;
+  }
+
+  for (std::vector < std::string >::iterator it = format_iter->second.begin ();
+       it != format_iter->second.end (); it++) {
+    const gchar *format = camera_params_get_gstreamer_format ((*it).c_str ());
+
+    if (!format)
+      continue;
+
+    ret = true;
+
+    GValue val = G_VALUE_INIT;
+    g_value_init (&val, G_TYPE_STRING);
+    g_value_set_string (&val, format);
+    gst_value_list_append_value (&output, &val);
+  }
+
+  return ret;
+}
+
+static void
+camera_params_parse_size (const char *size, int *width, int *height)
+{
+  gchar *width_str = g_strdup (size);
+  gchar *height_str;
+
+  for (height_str = width_str; *height_str; ++height_str) {
+    if (*height_str == 'x') {
+        *height_str = '\0';
+        ++height_str;
+        break;
+      }
+  }
+
+  *width = atoi (width_str);
+  *height = atoi (height_str);
+
+  g_free (width_str);
 }
 
 struct camera_params *
@@ -180,12 +268,15 @@ GstCaps *
 camera_params_get_viewfinder_caps (struct camera_params *params)
 {
   GValue fps_list = G_VALUE_INIT;
+  GValue format_list = G_VALUE_INIT;
   g_value_init (&fps_list, GST_TYPE_LIST);
+  g_value_init (&format_list, GST_TYPE_LIST);
 
   std::map < std::string, std::vector < std::string > >::iterator sizes =
       params->items.find ("preview-size-values");
 
-  if (sizes == params->items.end () || !camera_params_get_fps_list (params, fps_list)) {
+  if (sizes == params->items.end () || !camera_params_get_fps_list (params, fps_list)
+      || !camera_params_get_format_list (params, format_list)) {
     return gst_caps_new_empty ();
   }
 
@@ -193,35 +284,24 @@ camera_params_get_viewfinder_caps (struct camera_params *params)
 
   for (std::vector < std::string >::iterator size = sizes->second.begin ();
       size != sizes->second.end (); size++) {
-    std::stringstream stream;
-    stream.str (*size);
-    std::vector < std::string > d;
-    std::string item;
-
-    while (getline (stream, item, 'x')) {
-      d.push_back (item);
-    }
-
-    if (d.size () != 2) {
-      continue;
-    }
-
-    int width = atoi (d[0].c_str ());
-    int height = atoi (d[1].c_str ());
+    int width;
+    int height;
+    camera_params_parse_size (size->c_str (), &width, &height);
 
     if (!width || !height) {
       continue;
     }
 
-    // TODO: hardcoded
-    GstStructure *s = gst_structure_new ("video/x-android-buffer",
+    GstStructure *s = gst_structure_new ("video/x-raw",
 					 "width", G_TYPE_INT, width,
 					 "height", G_TYPE_INT, height,
 					 NULL);
 
-    gst_structure_set_value (s, "framerate", &fps_list);
     gst_caps_append_structure (caps, s);
   }
+
+  gst_caps_set_value (caps, "framerate", &fps_list);
+  gst_caps_set_value (caps, "format", &format_list);
 
   return caps;
 }
@@ -270,7 +350,7 @@ camera_params_get_capture_caps (struct camera_params * params)
     gst_caps_append_structure (caps, s);
   }
 
-  gst_caps_do_simplify (caps);
+  caps = gst_caps_simplify (caps);
 
   return caps;
 }
@@ -303,9 +383,22 @@ camera_params_set_viewfinder_fps (struct camera_params *params, int fps)
   camera_params_set (params, "preview-frame-rate", stream.str ().c_str ());
 }
 
+
+void
+camera_params_set_viewfinder_format (struct camera_params *params,
+    const gchar *format)
+{
+  const gchar *param_format = camera_params_get_param_format (format);
+
+  if (param_format) {
+    camera_params_set (params, "preview-format", param_format);
+  }
+}
+
 GstCaps *
 camera_params_get_video_caps (struct camera_params *params)
 {
+  const gchar *gst_format = NULL;
   GValue fps_list = G_VALUE_INIT;
   g_value_init (&fps_list, GST_TYPE_LIST);
 
@@ -314,6 +407,13 @@ camera_params_get_video_caps (struct camera_params *params)
 
   if (sizes == params->items.end () || !camera_params_get_fps_list (params, fps_list)) {
     return gst_caps_new_empty ();
+  }
+
+  std::map < std::string, std::vector < std::string > >::iterator format =
+      params->items.find ("video-frame-format");
+  if (format != params->items.end () && format->second.size () > 0) {
+      gst_format = camera_params_get_gstreamer_format(
+          format->second.front (). c_str());
   }
 
   GstCaps *caps = gst_caps_new_empty ();
@@ -340,12 +440,30 @@ camera_params_get_video_caps (struct camera_params *params)
       continue;
     }
 
-    GstStructure *s = gst_structure_new (GST_DROID_CAM_SRC_VIDEO_CAPS_NAME,
+    GstStructure *s = gst_structure_new ("video/x-raw",
+                                         "format", G_TYPE_STRING, gst_format,
 					 "width", G_TYPE_INT, width,
 					 "height", G_TYPE_INT, height,
 					 NULL);
     gst_structure_set_value (s, "framerate", &fps_list);
-    gst_caps_append_structure (caps, s);
+    caps = gst_caps_merge_structure (caps, s);
+  }
+
+  if (!gst_caps_is_empty (caps)) {
+    guint i, n;
+    GstCaps *featureCaps = gst_caps_copy (caps);
+    GstCapsFeatures *features = gst_caps_features_from_string
+        ("memory:AndroidMetadata");
+
+      gst_caps_set_features (featureCaps, 0, features);
+
+      n = gst_caps_get_size (featureCaps);
+      for (i = 1; i < n; ++i) {
+        gst_caps_set_features (featureCaps, i,
+            gst_caps_features_copy (features));
+      }
+
+      caps = gst_caps_merge (featureCaps, caps);
   }
 
   return caps;

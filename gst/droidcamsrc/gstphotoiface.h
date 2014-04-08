@@ -31,7 +31,6 @@ enum
   PROP_CAMERA_DEVICE,
   PROP_MODE,
   PROP_READY_FOR_CAPTURE,
-  PROP_VIDEO_METADATA,
   PROP_SENSOR_MOUNT_ANGLE,
   PROP_IMAGE_NOISE_REDUCTION,
   PROP_MAX_ZOOM,
@@ -49,7 +48,7 @@ enum
   N_PROPS,
 };
 
-void gst_photo_iface_init (GType type);
+void gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface);
 void gst_photo_iface_add_properties (GObjectClass * gobject_class);
 void gst_photo_iface_init_settings (GstDroidCamSrc * src);
 void gst_photo_iface_settings_to_params (GstDroidCamSrc * src);

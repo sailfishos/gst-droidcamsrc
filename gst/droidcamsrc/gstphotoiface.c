@@ -37,41 +37,33 @@ GST_DEBUG_CATEGORY_STATIC (droidphoto_debug);
 #define MIN_EV_COMP -2.5f
 #define MAX_EV_COMP +2.5f
 
-static void
-gst_photo_iface_implements_interface_init (GstImplementsInterfaceClass * klass);
-static gboolean
-gst_photo_iface_implements_iface_supported (GstImplementsInterface * iface,
-    GType iface_type);
-static void gst_photo_iface_photo_interface_init (GstPhotographyInterface *
-    iface);
-
 /* Flash */
 static gboolean gst_photo_iface_get_flash_mode (GstPhotography * photo,
-    GstFlashMode * flash);
+    GstPhotographyFlashMode * flash);
 static gboolean gst_photo_iface_set_flash_mode (GstPhotography * photo,
-    GstFlashMode flash);
-static GstFlashMode _gst_photo_iface_get_flash_mode (GstDroidCamSrc * src);
+    GstPhotographyFlashMode flash);
+static GstPhotographyFlashMode _gst_photo_iface_get_flash_mode (GstDroidCamSrc * src);
 static gboolean _gst_photo_iface_set_flash_mode (GstDroidCamSrc * src,
-    GstFlashMode flash, gboolean commit);
+    GstPhotographyFlashMode flash, gboolean commit);
 
 /* Focus */
 static gboolean gst_photo_iface_get_focus_mode (GstPhotography * photo,
-    GstFocusMode * focus);
+    GstPhotographyFocusMode * focus);
 static gboolean gst_photo_iface_set_focus_mode (GstPhotography * photo,
-    GstFocusMode focus);
-static GstFocusMode _gst_photo_iface_get_focus_mode (GstDroidCamSrc * src);
+    GstPhotographyFocusMode focus);
+static GstPhotographyFocusMode _gst_photo_iface_get_focus_mode (GstDroidCamSrc * src);
 static gboolean _gst_photo_iface_set_focus_mode (GstDroidCamSrc * src,
-    GstFocusMode focus, gboolean commit);
+    GstPhotographyFocusMode focus, gboolean commit);
 
 /* White balance */
 static gboolean gst_photo_iface_get_white_balance_mode (GstPhotography * photo,
-    GstWhiteBalanceMode * wb);
+    GstPhotographyWhiteBalanceMode * wb);
 static gboolean gst_photo_iface_set_white_balance_mode (GstPhotography * photo,
-    GstWhiteBalanceMode wb);
-static GstWhiteBalanceMode _gst_photo_iface_get_white_balance_mode
+    GstPhotographyWhiteBalanceMode wb);
+static GstPhotographyWhiteBalanceMode _gst_photo_iface_get_white_balance_mode
     (GstDroidCamSrc * src);
 static gboolean _gst_photo_iface_set_white_balance_mode (GstDroidCamSrc * src,
-    GstWhiteBalanceMode wb, gboolean commit);
+    GstPhotographyWhiteBalanceMode wb, gboolean commit);
 
 /* zoom */
 static gboolean gst_photo_iface_get_zoom (GstPhotography * photo,
@@ -103,43 +95,6 @@ static gboolean _gst_photo_iface_set_ev_compensation (GstDroidCamSrc * src,
 static void gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on);
 
 void
-gst_photo_iface_init (GType type)
-{
-  static const GInterfaceInfo implements_iface_info = {
-    (GInterfaceInitFunc) gst_photo_iface_implements_interface_init,
-    NULL,
-    NULL,
-  };
-
-  static const GInterfaceInfo photo_iface_info = {
-    (GInterfaceInitFunc) gst_photo_iface_photo_interface_init,
-    NULL,
-    NULL,
-  };
-
-  GST_DEBUG_CATEGORY_INIT (droidphoto_debug, "droidphoto", 0,
-      "Android camera source photography interface");
-
-  g_type_add_interface_static (type, GST_TYPE_IMPLEMENTS_INTERFACE,
-      &implements_iface_info);
-
-  g_type_add_interface_static (type, GST_TYPE_PHOTOGRAPHY, &photo_iface_info);
-}
-
-static void
-gst_photo_iface_implements_interface_init (GstImplementsInterfaceClass * klass)
-{
-  klass->supported = gst_photo_iface_implements_iface_supported;
-}
-
-static gboolean
-gst_photo_iface_implements_iface_supported (GstImplementsInterface * iface,
-    GType iface_type)
-{
-  return iface_type == GST_TYPE_PHOTOGRAPHY;
-}
-
-static void
 gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
 {
   iface->get_flash_mode = gst_photo_iface_get_flash_mode;
@@ -156,6 +111,10 @@ gst_photo_iface_photo_interface_init (GstPhotographyInterface * iface)
   iface->set_ev_compensation = gst_photo_iface_set_ev_compensation;
 
   iface->set_autofocus = gst_photo_iface_set_autofocus;
+
+
+  GST_DEBUG_CATEGORY_INIT (droidphoto_debug, "droidphoto", 0,
+      "Android camera source photography interface");
 
   // TODO: more
 }
@@ -306,7 +265,7 @@ gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
 }
 
 static gboolean
-gst_photo_iface_get_flash_mode (GstPhotography * photo, GstFlashMode * flash)
+gst_photo_iface_get_flash_mode (GstPhotography * photo, GstPhotographyFlashMode * flash)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
@@ -318,7 +277,7 @@ gst_photo_iface_get_flash_mode (GstPhotography * photo, GstFlashMode * flash)
 }
 
 static gboolean
-gst_photo_iface_set_flash_mode (GstPhotography * photo, GstFlashMode flash)
+gst_photo_iface_set_flash_mode (GstPhotography * photo, GstPhotographyFlashMode flash)
 {
   return _gst_photo_iface_set_flash_mode (GST_DROID_CAM_SRC (photo), flash,
       TRUE);
@@ -330,10 +289,10 @@ gst_photo_iface_update_flash_mode (GstDroidCamSrc * src)
   _gst_photo_iface_set_flash_mode (src, src->photo_settings.flash_mode, TRUE);
 }
 
-static GstFlashMode
+static GstPhotographyFlashMode
 _gst_photo_iface_get_flash_mode (GstDroidCamSrc * src)
 {
-  GstFlashMode flash;
+  GstPhotographyFlashMode flash;
 
   GST_OBJECT_LOCK (src);
 
@@ -347,7 +306,7 @@ _gst_photo_iface_get_flash_mode (GstDroidCamSrc * src)
 }
 
 static gboolean
-_gst_photo_iface_set_flash_mode (GstDroidCamSrc * src, GstFlashMode flash,
+_gst_photo_iface_set_flash_mode (GstDroidCamSrc * src, GstPhotographyFlashMode flash,
     gboolean commit)
 {
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
@@ -382,7 +341,7 @@ _gst_photo_iface_set_flash_mode (GstDroidCamSrc * src, GstFlashMode flash,
 }
 
 static gboolean
-gst_photo_iface_get_focus_mode (GstPhotography * photo, GstFocusMode * focus)
+gst_photo_iface_get_focus_mode (GstPhotography * photo, GstPhotographyFocusMode * focus)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
@@ -394,16 +353,16 @@ gst_photo_iface_get_focus_mode (GstPhotography * photo, GstFocusMode * focus)
 }
 
 static gboolean
-gst_photo_iface_set_focus_mode (GstPhotography * photo, GstFocusMode focus)
+gst_photo_iface_set_focus_mode (GstPhotography * photo, GstPhotographyFocusMode focus)
 {
   return _gst_photo_iface_set_focus_mode (GST_DROID_CAM_SRC (photo), focus,
       TRUE);
 }
 
-static GstFocusMode
+static GstPhotographyFocusMode
 _gst_photo_iface_get_focus_mode (GstDroidCamSrc * src)
 {
-  GstFocusMode focus;
+  GstPhotographyFocusMode focus;
 
   GST_OBJECT_LOCK (src);
 
@@ -418,7 +377,7 @@ _gst_photo_iface_get_focus_mode (GstDroidCamSrc * src)
 
 static gboolean
 _gst_photo_iface_set_focus_mode (GstDroidCamSrc * src,
-    GstFocusMode focus, gboolean commit)
+    GstPhotographyFocusMode focus, gboolean commit)
 {
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
 
@@ -470,7 +429,7 @@ gst_photo_iface_update_focus_mode (GstDroidCamSrc * src)
 
 static gboolean
 gst_photo_iface_get_white_balance_mode (GstPhotography * photo,
-    GstWhiteBalanceMode * wb)
+    GstPhotographyWhiteBalanceMode * wb)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
 
@@ -483,16 +442,16 @@ gst_photo_iface_get_white_balance_mode (GstPhotography * photo,
 
 static gboolean
 gst_photo_iface_set_white_balance_mode (GstPhotography * photo,
-    GstWhiteBalanceMode wb)
+    GstPhotographyWhiteBalanceMode wb)
 {
   return _gst_photo_iface_set_white_balance_mode (GST_DROID_CAM_SRC (photo), wb,
       TRUE);
 }
 
-static GstWhiteBalanceMode _gst_photo_iface_get_white_balance_mode
+static GstPhotographyWhiteBalanceMode _gst_photo_iface_get_white_balance_mode
     (GstDroidCamSrc * src)
 {
-  GstWhiteBalanceMode wb;
+  GstPhotographyWhiteBalanceMode wb;
 
   GST_OBJECT_LOCK (src);
 
@@ -507,7 +466,7 @@ static GstWhiteBalanceMode _gst_photo_iface_get_white_balance_mode
 
 static gboolean
 _gst_photo_iface_set_white_balance_mode (GstDroidCamSrc * src,
-    GstWhiteBalanceMode wb, gboolean commit)
+    GstPhotographyWhiteBalanceMode wb, gboolean commit)
 {
   GstDroidCamSrcClass *klass = GST_DROID_CAM_SRC_GET_CLASS (src);
 
@@ -747,7 +706,7 @@ static void
 gst_photo_iface_set_autofocus (GstPhotography * photo, gboolean on)
 {
   GstDroidCamSrc *src = GST_DROID_CAM_SRC (photo);
-  GstFocusMode mode;
+  GstPhotographyFocusMode mode;
 
   GST_OBJECT_LOCK (src);
   mode = src->photo_settings.focus_mode;

@@ -21,10 +21,9 @@
 #define __GST_DROID_CAM_SRC_H__
 
 #include <gst/gst.h>
+#include <gst/video/video.h>
 
 #include <hardware/camera.h>
-#include "gst/gstgralloc.h"
-#include "gstcamerabufferpool.h"
 #ifndef GST_USE_UNSTABLE_API
 #define GST_USE_UNSTABLE_API
 #include <gst/interfaces/photography.h>
@@ -59,8 +58,6 @@ G_BEGIN_DECLS
 
 #define DEFAULT_FPS                        30
 
-#define GST_DROID_CAM_SRC_VIDEO_CAPS_NAME  "video/x-raw-data"
-
 typedef enum {
   VIDEO_CAPTURE_ERROR = -1,
   VIDEO_CAPTURE_STARTING = 0,
@@ -76,6 +73,7 @@ typedef struct _GstDroidCamSrc GstDroidCamSrc;
 typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;
 
 typedef struct _GstDroidCamSrcCameraInfo GstDroidCamSrcCameraInfo;
+typedef struct _GstDroidCamSrcCrop GstDroidCamSrcCrop;
 
 struct _GstDroidCamSrcCameraInfo {
   /* Sensor mount angle */
@@ -85,10 +83,17 @@ struct _GstDroidCamSrcCameraInfo {
   int id;
 };
 
+
+struct _GstDroidCamSrcCrop {
+  int left;
+  int top;
+  int right;
+  int bottom;
+};
+
 struct _GstDroidCamSrc {
   GstBin parent;
 
-  GstGralloc *gralloc;
   struct hw_module_t *hwmod;
   camera_module_t *cam;
 
@@ -98,20 +103,24 @@ struct _GstDroidCamSrc {
   struct camera_params *camera_params;
   GMutex params_lock;
 
-  GstCameraBufferPool *pool;
-
   gint user_camera_device;
   gint camera_device;
   gint mode;
-  gboolean video_metadata;
 
   GList *events;
-
-  GstSegment segment;
 
   GstPad *vfsrc;
   GstPad *imgsrc;
   GstPad *vidsrc;
+
+  preview_stream_ops_t viewfinder_window;
+  GstVideoInfo viewfinder_info;
+  GstDroidCamSrcCrop viewfinder_crop;
+  GstBufferPool *viewfinder_pool;
+  int viewfinder_usage;
+  int viewfinder_format;
+  int viewfinder_orientation;
+  int viewfinder_buffer_count;
 
   gboolean send_new_segment;
 
@@ -121,24 +130,10 @@ struct _GstDroidCamSrc {
   gboolean image_renegotiate;
   gboolean video_renegotiate;
 
-  GQueue *img_queue;
-  GCond img_cond;
-  GMutex img_lock;
-  gboolean img_task_running;
-
-  GQueue *video_queue;
-  GCond video_cond;
-  GMutex video_lock;
-  gboolean video_task_running;
-
-  GMutex pushed_video_frames_lock;
-  GCond pushed_video_frames_cond;
-  int pushed_video_frames;
-
-  GMutex video_capture_status_lock;
-  GCond video_capture_status_cond;
-
   VideoCaptureStatus video_capture_status;
+  int64_t video_start_time;
+
+  int pushed_video_frames;
 
   int num_video_frames;
   GMutex num_video_frames_lock;
@@ -150,7 +145,7 @@ struct _GstDroidCamSrc {
   GstDroidCamSrcCameraInfo device_info[2];
 
   /* photography interface bits */
-  GstPhotoSettings photo_settings;
+  GstPhotographySettings photo_settings;
   gfloat max_zoom;
   gboolean video_torch;
 
@@ -167,9 +162,6 @@ struct _GstDroidCamSrcClass {
   GstBinClass parent_class;
 
   gboolean (* set_camera_params) (GstDroidCamSrc *src);
-
-  gboolean (* open_segment) (GstDroidCamSrc *src, GstPad * pad);
-  void (* update_segment) (GstDroidCamSrc *src, GstBuffer * buffer);
 };
 
 GType gst_droid_cam_src_get_type (void);

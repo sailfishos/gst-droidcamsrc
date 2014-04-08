@@ -22,63 +22,187 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "gstcameramemory.h"
-#include <glib.h>
-#include <sys/mman.h>
-#include <stdio.h>              /* perror() */
-#include <unistd.h>             /* getpagesize() */
 
-typedef struct
+#include <sys/mman.h>
+
+GST_DEBUG_CATEGORY_STATIC (droidcameramemory_debug);
+#define GST_CAT_DEFAULT droidcameramemory_debug
+
+typedef struct _GstCameraMemoryAllocator GstCameraMemoryAllocator;
+typedef struct _GstCameraMemoryAllocatorClass GstCameraMemoryAllocatorClass;
+
+struct _GstCameraMemoryAllocator
 {
+  GstAllocator parent;
+
   camera_memory_t mem;
   int fd;
   size_t buf_size;
   guint num_bufs;
   void *data;
-} GstCameraMemory;
+};
 
-static gboolean gst_camera_memory_get_mmap (GstCameraMemory * mem);
-static gboolean gst_camera_memory_get_malloc (GstCameraMemory * mem);
+struct _GstCameraMemoryAllocatorClass
+{
+  GstAllocatorClass parent_class;
+};
+
+typedef struct _GstCameraMemory GstCameraMemory;
+struct _GstCameraMemory
+{
+  GstMemory mem;
+
+  void *data;
+  GstDroidCamSrc *src;
+};
+
+static gboolean gst_camera_memory_get_mmap (GstCameraMemoryAllocator * alloc);
+static gboolean gst_camera_memory_get_malloc (GstCameraMemoryAllocator * alloc);
 static void gst_camera_memory_release (struct camera_memory *mem);
 
-camera_memory_t *
-gst_camera_memory_get (int fd, size_t buf_size, unsigned int num_bufs,
-    void *data)
+static gpointer
+gst_camera_memory_map (GstMemory * mem, gsize maxsize,
+    GstMapFlags flags)
 {
-  GstCameraMemory *mem = g_slice_new0 (GstCameraMemory);
-  gboolean res;
-  size_t size = buf_size * num_bufs;
-  const size_t pagesize = getpagesize ();
-  size = ((size + pagesize - 1) & ~(pagesize - 1));
+  GstCameraMemory *memory = (GstCameraMemory *) mem;
 
-  mem->fd = fd;
-  mem->buf_size = buf_size;
-  mem->num_bufs = num_bufs;
-  mem->data = data;
-  mem->mem.size = size;
-  mem->mem.handle = mem;
-  mem->mem.release = gst_camera_memory_release;
-
-  if (fd != -1) {
-    res = gst_camera_memory_get_mmap (mem);
-  } else {
-    res = gst_camera_memory_get_malloc (mem);
-  }
-
-  if (res == FALSE) {
-    g_slice_free (GstCameraMemory, mem);
+  if (flags & GST_MAP_WRITE) {
     return NULL;
   }
 
-  return &mem->mem;
+  return memory->data;
+}
+
+static void
+gst_camera_memory_unmap (GstMemory * mem)
+{
+}
+
+GType gst_camera_memory_allocator_get_type (void);
+G_DEFINE_TYPE (GstCameraMemoryAllocator,
+    gst_camera_memory_allocator, GST_TYPE_ALLOCATOR);
+
+#define GST_TYPE_CAMERA_MEMORY_ALLOCATOR      (gst_camera_memory_allocator_get_type())
+#define GST_IS_CAMERA_MEMORY_ALLOCATOR(obj)   (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_CAMERA_MEMORY_ALLOCATOR))
+#define GST_CAMERA_MEMORY_ALLOCATOR(obj)      (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_CAMERA_MEMORY_ALLOCATOR, GstCameraMemoryAllocator))
+#define GST_CAMERA_MEMORY_ALLOCATOR_CAST(obj) ((GstCameraMemoryAllocator*) (obj))
+
+static GstMemory *
+gst_camera_memory_allocator_alloc (GstAllocator * alloc, gsize size,
+    GstAllocationParams * params)
+{
+  g_assert_not_reached ();
+  return NULL;
+}
+
+static void
+gst_camera_memory_allocator_free (GstAllocator * alloc, GstMemory * mem)
+{
+  GstCameraMemory *memory = (GstCameraMemory *) mem;
+
+  if (memory->src) {
+    GST_PAD_STREAM_LOCK (memory->src->vidsrc);
+    if (memory->src->video_capture_status == VIDEO_CAPTURE_RUNNING) {
+      memory->src->dev->ops->release_recording_frame (memory->src->dev,
+          memory->data);
+    }
+    GST_PAD_STREAM_UNLOCK (memory->src->vidsrc);
+
+    g_mutex_lock (&memory->src->num_video_frames_lock);
+    if (--memory->src->pushed_video_frames == 0) {
+      g_cond_signal (&memory->src->num_video_frames_cond);
+    }
+    g_mutex_unlock (&memory->src->num_video_frames_lock);
+
+    gst_object_unref (memory->src);
+  }
+
+  g_slice_free (GstCameraMemory, memory);
+}
+
+static void
+gst_camera_memory_allocator_finalize (GObject * object)
+{
+  GstCameraMemoryAllocator * allocator = GST_CAMERA_MEMORY_ALLOCATOR
+      (object);
+
+  if (allocator->fd < 0) {
+    g_slice_free1 (allocator->mem.size, allocator->mem.data);
+  } else {
+    munmap (allocator->mem.data, allocator->mem.size);
+  }
+
+  G_OBJECT_CLASS (gst_camera_memory_allocator_parent_class)->finalize
+      (object);
+}
+
+static void
+gst_camera_memory_allocator_class_init (
+    GstCameraMemoryAllocatorClass * klass)
+{
+  GstAllocatorClass *allocator_class = (GstAllocatorClass *) klass;
+  GObjectClass *gobject = (GObjectClass *) klass;
+
+  allocator_class->alloc = gst_camera_memory_allocator_alloc;
+  allocator_class->free = gst_camera_memory_allocator_free;
+
+  gobject->finalize = gst_camera_memory_allocator_finalize;
+
+  GST_DEBUG_CATEGORY_INIT (droidcameramemory_debug, "droidcameramemory", 0,
+      "Android camera memory allocation");
+}
+
+static void
+gst_camera_memory_allocator_init (
+    GstCameraMemoryAllocator * allocator)
+{
+  GstAllocator *alloc = GST_ALLOCATOR_CAST (allocator);
+
+  alloc->mem_type = "GstDroidCameraMemory";
+  alloc->mem_map = gst_camera_memory_map;
+  alloc->mem_unmap = gst_camera_memory_unmap;
+
+  GST_OBJECT_FLAG_SET (alloc, GST_ALLOCATOR_FLAG_CUSTOM_ALLOC);
+}
+
+
+camera_memory_t *
+gst_camera_memory_get (int fd, size_t buf_size, unsigned int num_bufs,
+    void *user_data)
+{
+  GstCameraMemoryAllocator *allocator = g_object_new
+      (gst_camera_memory_allocator_get_type(), NULL);
+  gboolean res;
+  size_t size = buf_size * num_bufs;
+
+  allocator->fd = fd;
+  allocator->buf_size = buf_size;
+  allocator->num_bufs = num_bufs;
+  allocator->data = NULL;
+  allocator->mem.size = size;
+  allocator->mem.handle = allocator;
+  allocator->mem.release = gst_camera_memory_release;
+
+  if (fd != -1) {
+    res = gst_camera_memory_get_mmap (allocator);
+  } else {
+    res = gst_camera_memory_get_malloc (allocator);
+  }
+
+  if (res == FALSE) {
+    gst_object_unref (allocator);
+    return NULL;
+  }
+
+  return &allocator->mem;
 }
 
 static gboolean
-gst_camera_memory_get_mmap (GstCameraMemory * mem)
+gst_camera_memory_get_mmap (GstCameraMemoryAllocator * alloc)
 {
-  mem->mem.data =
-      mmap (0, mem->mem.size, PROT_READ | PROT_WRITE, MAP_SHARED, mem->fd, 0);
-  if (mem->mem.data == MAP_FAILED) {
-    perror ("mmap");
+  alloc->mem.data =
+      mmap (0, alloc->mem.size, PROT_READ | PROT_WRITE, MAP_SHARED, alloc->fd, 0);
+  if (alloc->mem.data == MAP_FAILED) {
     return FALSE;
   }
 
@@ -86,11 +210,10 @@ gst_camera_memory_get_mmap (GstCameraMemory * mem)
 }
 
 static gboolean
-gst_camera_memory_get_malloc (GstCameraMemory * mem)
+gst_camera_memory_get_malloc (GstCameraMemoryAllocator * alloc)
 {
-  mem->mem.data = g_slice_alloc (mem->mem.size);
-  if (!mem->mem.data) {
-    perror ("malloc");
+  alloc->mem.data = g_slice_alloc (alloc->mem.size);
+  if (!alloc->mem.data) {
     return FALSE;
   }
 
@@ -100,38 +223,44 @@ gst_camera_memory_get_malloc (GstCameraMemory * mem)
 static void
 gst_camera_memory_release (struct camera_memory *mem)
 {
-  GstCameraMemory *cm = (GstCameraMemory *) mem->handle;
+  GstCameraMemoryAllocator *alloc = (GstCameraMemoryAllocator *) mem->handle;
 
-  if (cm->fd < 0) {
-    g_slice_free1 (cm->mem.size, cm->mem.data);
-  } else {
-    munmap (cm->mem.data, cm->mem.size);
-  }
-
-  g_slice_free (GstCameraMemory, cm);
-
-  mem = NULL;
+  gst_object_unref (alloc);
 }
 
-void *
-gst_camera_memory_get_data (const camera_memory_t * data, int index, int *size)
+GstMemory *
+gst_camera_memory_new (const camera_memory_t *camera_memory, unsigned int index)
 {
-  unsigned long offset;
-  void *buffer;
+  GstCameraMemoryAllocator *allocator
+      = (GstCameraMemoryAllocator *) camera_memory->handle;
+  GstCameraMemory *memory = g_slice_new (GstCameraMemory);
 
-  GstCameraMemory *cm = (GstCameraMemory *) data->handle;
+  gst_memory_init (GST_MEMORY_CAST (memory), GST_MEMORY_FLAG_READONLY,
+      GST_ALLOCATOR(allocator), NULL, allocator->buf_size, 4, 0,
+      allocator->buf_size);
 
-  if (index >= cm->num_bufs) {
-    return NULL;
-  }
+  memory->data = allocator->mem.data + (index * allocator->buf_size);
+  memory->src = NULL;
 
-  offset = index * cm->buf_size;
+  return (GstMemory *) memory;
+}
 
-  buffer = cm->mem.data;
+GstMemory *
+gst_camera_memory_new_video (const camera_memory_t *camera_memory,
+    unsigned int index, GstDroidCamSrc *src)
+{
+  GstCameraMemoryAllocator *allocator
+      = (GstCameraMemoryAllocator *) camera_memory->handle;
+  GstCameraMemory *memory = g_slice_new (GstCameraMemory);
 
-  buffer += offset;
+  gst_memory_init (GST_MEMORY_CAST (memory), GST_MEMORY_FLAG_READONLY,
+      GST_ALLOCATOR(allocator), NULL, allocator->buf_size, 4, 0,
+      allocator->buf_size);
 
-  *size = cm->buf_size;
+  memory->data = allocator->mem.data + (index * allocator->buf_size);
+  memory->src = src;
 
-  return buffer;
+  gst_object_ref (memory->src);
+
+  return (GstMemory *) memory;
 }
