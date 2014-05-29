@@ -33,5 +33,6 @@ make
 
 %files
 %defattr(-,root,root,-)
+%{_bindir}/*
 %{_libdir}/gstreamer-0.10/libgstdroidcamsrc.so
 %{_sysconfdir}/xdg/*.conf
