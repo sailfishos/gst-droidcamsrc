@@ -3,7 +3,7 @@ libtest_la_SOURCES = test.c
 noinst_HEADERS = test.h
 INCLUDES = $(GST_CFLAGS)
 
-noinst_PROGRAMS = simple capture video camerabin2
+bin_PROGRAMS = simple capture video camerabin2
 
 simple_SOURCES = simple.c
 simple_LDADD = libtest.la $(GST_LIBS)
