@@ -59,6 +59,7 @@ gst_camera_settings_new ()
   settings->scene_mode = gst_camera_settings_load (file, "scene-mode");
   settings->flicker_mode = gst_camera_settings_load (file, "flicker-mode");
   settings->exposure_mode = gst_camera_settings_load (file, "exposure-mode");
+  settings->face_detection = gst_camera_settings_load (file, "face-detection");
 
 out:
   if (file) {
@@ -119,6 +120,11 @@ gst_camera_settings_destroy (GstCameraSettings * settings)
   if (settings->exposure_mode) {
     g_hash_table_destroy (settings->exposure_mode);
     settings->exposure_mode = NULL;
+  }
+
+  if (settings->face_detection) {
+    g_hash_table_destroy (settings->face_detection);
+    settings->face_detection = NULL;
   }
 
   g_free (settings);

@@ -127,6 +127,9 @@ static void gst_droid_cam_src_handle_compressed_image (GstDroidCamSrc * src,
     const camera_memory_t * mem, unsigned int index,
     camera_frame_metadata_t * metadata);
 
+static void gst_droid_cam_src_handle_preview_metadata (GstDroidCamSrc * src,
+    camera_frame_metadata_t * metadata);
+
 static gboolean gst_droid_cam_src_finish_capture (GstDroidCamSrc * src);
 static void gst_droid_cam_src_update_max_zoom (GstDroidCamSrc * src);
 static void gst_droid_cam_src_update_zoom_ratios (GstDroidCamSrc * src);
@@ -282,6 +285,7 @@ gst_droid_cam_src_init (GstDroidCamSrc * src)
   src->max_zoom = DEFAULT_MAX_ZOOM;
   src->video_torch = DEFAULT_VIDEO_TORCH;
   src->ev_comp_step = 0.0;
+  src->detect_faces = FALSE;
 
   src->capturing = FALSE;
   g_mutex_init (&src->capturing_mutex);
@@ -892,6 +896,8 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
   int err;
   GST_DEBUG_OBJECT (src, "start pipeline");
 
+  src->num_detected_faces = 0;
+
   src->dev->ops->enable_msg_type (src->dev, CAMERA_MSG_ALL_MSGS);
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_PREVIEW_FRAME);
   src->dev->ops->disable_msg_type (src->dev, CAMERA_MSG_RAW_IMAGE);
@@ -903,6 +909,10 @@ gst_droid_cam_src_start_pipeline (GstDroidCamSrc * src)
         (NULL));
 
     return FALSE;
+  }
+
+  if (src->detect_faces) {
+    src->dev->ops->send_command (src->dev, CAMERA_CMD_START_FACE_DETECTION, 0, 0);
   }
 
   return TRUE;
@@ -1055,10 +1065,6 @@ gst_droid_cam_src_start_video_capture_unlocked (GstDroidCamSrc * src)
   src->video_capture_status = VIDEO_CAPTURE_STARTING;
   GST_PAD_STREAM_UNLOCK (src->vidsrc);
 
-
-  /* We need to reset focus mode because default for video recording is continuous-video */
-  gst_photo_iface_update_focus_mode (src);
-
   err = src->dev->ops->start_recording (src->dev);
   if (err != 0) {
     GST_WARNING_OBJECT (src, "failed to start video recording: %d", err);
@@ -1201,6 +1207,30 @@ out:
   return FALSE;                 /* Don't call us again */
 }
 
+#define SCALE_COORDINATE(coordinate, size) \
+  (((coordinate) + 1000) * (size)) / 2000
+
+static void
+gst_droid_cam_src_handle_preview_metadata (GstDroidCamSrc * src,
+    camera_frame_metadata_t * metadata)
+{
+  int i;
+
+ GST_PAD_STREAM_LOCK (src->vfsrc);
+
+  src->num_detected_faces = MIN(metadata->number_of_faces,
+      MAXIMUM_DETECTED_FACES);
+
+  for (i = 0; i < src->num_detected_faces; ++i) {
+    src->detected_faces[i].left = SCALE_COORDINATE (metadata->faces[i].rect[0], src->viewfinder_info.width);
+    src->detected_faces[i].top = SCALE_COORDINATE (metadata->faces[i].rect[1], src->viewfinder_info.height);
+    src->detected_faces[i].right = SCALE_COORDINATE (metadata->faces[i].rect[2], src->viewfinder_info.width);
+    src->detected_faces[i].bottom = SCALE_COORDINATE (metadata->faces[i].rect[3], src->viewfinder_info.height);
+  }
+
+  GST_PAD_STREAM_UNLOCK (src->vfsrc);
+}
+
 static void
 gst_droid_cam_src_data_callback (int32_t msg_type, const camera_memory_t * mem,
     unsigned int index, camera_frame_metadata_t * metadata, void *user_data)
@@ -1213,6 +1243,9 @@ gst_droid_cam_src_data_callback (int32_t msg_type, const camera_memory_t * mem,
       gst_droid_cam_src_send_capture_end (src);
       gst_droid_cam_src_handle_compressed_image (src, mem, index, metadata);
       break;
+
+    case CAMERA_MSG_PREVIEW_METADATA:
+      gst_droid_cam_src_handle_preview_metadata (src, metadata);
 
     default:
       GST_WARNING_OBJECT (src, "unknown message 0x%x from HAL", msg_type);
@@ -1545,8 +1578,6 @@ gst_droid_cam_src_apply_image_noise_reduction (GstDroidCamSrc * src)
   }
 
   GST_OBJECT_UNLOCK (src);
-
-  gst_droid_cam_src_set_camera_params (src);
 }
 
 static void

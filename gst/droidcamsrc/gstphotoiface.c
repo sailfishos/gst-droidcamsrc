@@ -112,6 +112,10 @@ static gboolean gst_photo_iface_set_flicker_mode_unlocked (GstDroidCamSrc * src,
 static gboolean gst_photo_iface_set_exposure_mode_unlocked (GstDroidCamSrc * src,
     GstPhotographyExposureMode mode, gboolean commit);
 
+/* Face detection */
+static gboolean gst_photo_iface_set_face_detection_enabled_unlocked
+    (GstDroidCamSrc * src, gboolean enabled, gboolean commit);
+
 /* Capabilities */
 static  GstPhotographyCaps gst_photo_iface_get_capabilities
     (GstPhotography * photo);
@@ -285,6 +289,14 @@ gst_photo_iface_add_properties (GObjectClass * gobject_class)
 
   g_object_class_override_property (gobject_class, PROP_MAX_EXPOSURE_TIME,
       GST_PHOTOGRAPHY_PROP_MAX_EXPOSURE_TIME);
+
+  g_object_class_install_property (gobject_class, PROP_DETECT_FACES,
+      g_param_spec_boolean ("detect-faces",
+          "Face detection property",
+          "Determines whether the camera will tag buffers with the location of "
+          "detected faces",
+          FALSE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 
 void
@@ -307,6 +319,8 @@ gst_photo_iface_settings_to_params (GstDroidCamSrc * src,
   gst_photo_iface_set_flicker_mode_unlocked (src, settings->flicker_mode,
       FALSE);
   gst_photo_iface_set_exposure_mode_unlocked (src, settings->exposure_mode,
+      FALSE);
+  gst_photo_iface_set_face_detection_enabled_unlocked (src, src->detect_faces,
       FALSE);
 }
 
@@ -422,6 +436,10 @@ gst_photo_iface_get_property (GstDroidCamSrc * src, guint prop_id,
       g_value_set_uint (value, src->photo_settings.max_exposure_time);
       break;
 
+    case PROP_DETECT_FACES:
+      g_value_set_boolean (value, src->detect_faces);
+      break;
+
     default:
       ret = FALSE;
       break;
@@ -487,6 +505,11 @@ gst_photo_iface_set_property (GstDroidCamSrc * src, guint prop_id,
     case PROP_EXPOSURE_MODE:
       ret = gst_photo_iface_set_exposure_mode_unlocked (src,
           g_value_get_enum (value), TRUE);
+      break;
+
+    case PROP_DETECT_FACES:
+      ret = gst_photo_iface_set_face_detection_enabled_unlocked (src,
+          g_value_get_boolean (value), TRUE);
       break;
   }
   GST_OBJECT_UNLOCK (src);
@@ -983,6 +1006,25 @@ static gboolean gst_photo_iface_set_exposure_mode_unlocked (GstDroidCamSrc * src
       src->settings->exposure_mode, "auto-exposure-lock", mode, commit);
   if (ret) {
     src->photo_settings.exposure_mode = mode;
+  }
+  return ret;
+}
+
+/* Face detection */
+static gboolean
+gst_photo_iface_set_face_detection_enabled_unlocked (GstDroidCamSrc * src,
+    gboolean enabled, gboolean commit)
+{
+  gboolean ret = gst_photo_iface_set_enum_parameter_unlocked (src,
+      src->settings->face_detection, "face-detection", (enabled ? TRUE : FALSE),
+      commit);
+  if (ret) {
+    GST_PAD_STREAM_LOCK (src->vfsrc);
+    src->detect_faces = enabled;
+    if (src->detect_faces) {
+      src->num_detected_faces = 0;
+    }
+    GST_PAD_STREAM_UNLOCK (src->vfsrc);
   }
   return ret;
 }

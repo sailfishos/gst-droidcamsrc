@@ -32,6 +32,7 @@ typedef struct {
   GHashTable *scene_mode;
   GHashTable *flicker_mode;
   GHashTable *exposure_mode;
+  GHashTable *face_detection;
 } GstCameraSettings;
 
 GstCameraSettings *gst_camera_settings_new ();

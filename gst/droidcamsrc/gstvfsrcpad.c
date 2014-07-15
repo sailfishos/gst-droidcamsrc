@@ -495,6 +495,16 @@ gst_droid_cam_src_vfsrc_enqueue_buffer (preview_stream_ops_t * window,
   crop_meta->width = src->viewfinder_crop.right - src->viewfinder_crop.left;
   crop_meta->height = src->viewfinder_crop.bottom - src->viewfinder_crop.top;
 
+  if (src->detect_faces) {
+    gint i;
+    for (i = 0; i < src->num_detected_faces; ++i) {
+      gst_buffer_add_video_region_of_interest_meta (buffer, "face",
+        src->detected_faces[i].left, src->detected_faces[i].top,
+        src->detected_faces[i].right - src->detected_faces[i].left,
+        src->detected_faces[i].bottom - src->detected_faces[i].top);
+    }
+  }
+
   GST_PAD_STREAM_UNLOCK (src->vfsrc);
 
   if (G_UNLIKELY (send_new_segment)) {

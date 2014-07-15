@@ -58,6 +58,8 @@ G_BEGIN_DECLS
 
 #define DEFAULT_FPS                        30
 
+#define MAXIMUM_DETECTED_FACES             4
+
 typedef enum {
   VIDEO_CAPTURE_ERROR = -1,
   VIDEO_CAPTURE_STARTING = 0,
@@ -73,7 +75,7 @@ typedef struct _GstDroidCamSrc GstDroidCamSrc;
 typedef struct _GstDroidCamSrcClass GstDroidCamSrcClass;
 
 typedef struct _GstDroidCamSrcCameraInfo GstDroidCamSrcCameraInfo;
-typedef struct _GstDroidCamSrcCrop GstDroidCamSrcCrop;
+typedef struct _GstDroidCamSrcRect GstDroidCamSrcRect;
 
 struct _GstDroidCamSrcCameraInfo {
   /* Sensor mount angle */
@@ -84,7 +86,7 @@ struct _GstDroidCamSrcCameraInfo {
 };
 
 
-struct _GstDroidCamSrcCrop {
+struct _GstDroidCamSrcRect {
   int left;
   int top;
   int right;
@@ -115,12 +117,15 @@ struct _GstDroidCamSrc {
 
   preview_stream_ops_t viewfinder_window;
   GstVideoInfo viewfinder_info;
-  GstDroidCamSrcCrop viewfinder_crop;
+  GstDroidCamSrcRect viewfinder_crop;
   GstBufferPool *viewfinder_pool;
   int viewfinder_usage;
   int viewfinder_format;
   int viewfinder_orientation;
   int viewfinder_buffer_count;
+
+  GstDroidCamSrcRect detected_faces[MAXIMUM_DETECTED_FACES];
+  int num_detected_faces;
 
   gboolean send_new_segment;
 
@@ -150,6 +155,8 @@ struct _GstDroidCamSrc {
   gint num_zoom_ratios;
   gfloat max_zoom;
   gboolean video_torch;
+
+  gboolean detect_faces;
 
   GstCameraSettings *settings;
 
