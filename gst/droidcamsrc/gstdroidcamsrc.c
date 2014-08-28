@@ -1492,8 +1492,6 @@ gst_droid_cam_src_finish_capture (GstDroidCamSrc * src)
 
   GST_DEBUG_OBJECT (src, "finish capture");
 
-  /* Here we can safely get rid of any buffers held by the app
-   * because hal has returned back all the buffers */
   gst_camera_buffer_pool_clear (src->pool);
 
   err = src->dev->ops->start_preview (src->dev);
