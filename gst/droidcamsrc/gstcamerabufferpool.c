@@ -461,6 +461,8 @@ gst_camera_buffer_pool_dequeue_buffer (struct preview_stream_ops *w,
   *stride = gst_native_buffer_get_stride (buff);
   *buffer = gst_native_buffer_get_handle (buff);
 
+  gst_buffer_ref (GST_BUFFER (buff));
+
   GST_DEBUG_OBJECT (pool, "dequeueing buffer %p", buff);
 
   return 0;
@@ -536,6 +538,8 @@ gst_camera_buffer_pool_enqueue_buffer (struct preview_stream_ops *w,
 
   GST_LOG_OBJECT (pool, "enqueue buffer %p", buff);
 
+  gst_buffer_unref (GST_BUFFER (buff));
+
   GST_CAMERA_BUFFER_POOL_LOCK (pool);
 
   if (pool->flushing) {
@@ -580,15 +584,7 @@ gst_camera_buffer_pool_cancel_buffer (struct preview_stream_ops *w,
 
   GST_DEBUG_OBJECT (pool, "cancel buffer: %p", buff);
 
-  g_mutex_lock (&pool->hal_lock);
-
-  g_queue_push_tail (pool->hal_queue, buff);
-
-  g_cond_signal (&pool->hal_cond);
-
-  GST_LOG_OBJECT (pool, "hal queue size: %i", pool->hal_queue->length);
-
-  g_mutex_unlock (&pool->hal_lock);
+  gst_buffer_unref (GST_BUFFER (buff));
 
   return 0;
 }
